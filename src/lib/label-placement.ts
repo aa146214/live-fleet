@@ -44,12 +44,22 @@ export function placementsAround(anchorHalf: number, size: Size, gap: number): P
 }
 
 /**
- * Picks the first candidate where the label touches none of the obstacles.
- * When every candidate touches something, the first (preferred) one is used.
+ * Picks the first candidate where the label touches none of the obstacles or
+ * soft obstacles (e.g. place-name labels). Failing that, the first one clear of
+ * the obstacles alone; failing that, the first (preferred) candidate.
  */
-export function placeLabel(size: Size, candidates: Placement[], obstacles: Box[], gap: number): Placement {
-  const fits = candidates.find((candidate) =>
-    obstacles.every((obstacle) => !intersects({ ...candidate, ...size }, obstacle, gap)),
+export function placeLabel(
+  size: Size,
+  candidates: Placement[],
+  obstacles: Box[],
+  gap: number,
+  softObstacles: Box[] = [],
+): Placement {
+  const clearOf = (candidate: Placement, boxes: Box[]) =>
+    boxes.every((box) => !intersects({ ...candidate, ...size }, box, gap));
+  return (
+    candidates.find((candidate) => clearOf(candidate, obstacles) && clearOf(candidate, softObstacles)) ??
+    candidates.find((candidate) => clearOf(candidate, obstacles)) ??
+    candidates[0]
   );
-  return fits ?? candidates[0];
 }

@@ -25,6 +25,10 @@ const PILL_GAP = 6;
 /** Hover label size: 11px bold code beside a 14px bus icon. */
 const HOVER_LABEL_HEIGHT = 26;
 const hoverLabelWidth = (code: string) => Math.round(36 + code.length * 7.5);
+/** Place-name label geometry (see .poi in the stylesheet): starts 11px left of its point. */
+const POI_LABEL_HEIGHT = 26;
+const POI_LABEL_OFFSET_X = -11;
+const poiLabelWidth = (name: string) => Math.round(14 + name.length * 6.2);
 
 // Shuttle codes fit the 60px Figma marker; registrations (unassigned vehicles) need more room.
 const markerWidth = (code: string) => Math.max(60, Math.round(36 + code.length * 8));
@@ -263,6 +267,18 @@ function VehicleLayer({ vehicles, selectedCode, onSelect }: Omit<FleetMapProps, 
       ].map((box) => ({ ...box, x: box.x - origin.x, y: box.y - origin.y }));
     };
 
+    // Place-name labels are avoided too, but covering one beats covering a minibus.
+    const poiBoxes: Box[] = POINTS_OF_INTEREST.map((poi) => {
+      const { x, y } = map.latLngToContainerPoint([poi.lat, poi.lng]);
+      const width = poiLabelWidth(poi.name);
+      return { x: x + POI_LABEL_OFFSET_X + width / 2, y, width, height: POI_LABEL_HEIGHT };
+    });
+    const poiObstaclesAround = (vehicle: Vehicle): Box[] => {
+      const origin = screen.get(vehicle.id);
+      if (!origin) return [];
+      return poiBoxes.map((box) => ({ ...box, x: box.x - origin.x, y: box.y - origin.y }));
+    };
+
     // The selected pill: centred if that covers nothing, else a callout beside its dot.
     const selected = vehicles.find((vehicle) => vehicle.code === selectedCode);
     let selectedBox: Box | null = null;
@@ -270,7 +286,7 @@ function VehicleLayer({ vehicles, selectedCode, onSelect }: Omit<FleetMapProps, 
       const size = { width: markerWidth(selected.code), height: MARKER_HEIGHT };
       const candidates = [CENTRED, ...placementsAround(COMPACT_SIZE / 2, size, PILL_GAP)];
       const placement = roundPlacement(
-        placeLabel(size, candidates, obstaclesAround(selected), PILL_GAP),
+        placeLabel(size, candidates, obstaclesAround(selected), PILL_GAP, poiObstaclesAround(selected)),
       );
       result.set(selected.id, { labelled: true, placement });
       const origin = screen.get(selected.id);
@@ -285,7 +301,9 @@ function VehicleLayer({ vehicles, selectedCode, onSelect }: Omit<FleetMapProps, 
       const obstacles = obstaclesAround(vehicle, selectedBox ? [selectedBox] : []);
       result.set(vehicle.id, {
         labelled: false,
-        placement: roundPlacement(placeLabel(size, candidates, obstacles, LABEL_GAP)),
+        placement: roundPlacement(
+          placeLabel(size, candidates, obstacles, LABEL_GAP, poiObstaclesAround(vehicle)),
+        ),
       });
     }
     return result;
