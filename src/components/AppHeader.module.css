@@ -20,12 +20,13 @@
   white-space: nowrap;
 }
 
-.filters {
+.routes {
   display: flex;
   gap: 6px;
+  list-style: none;
 }
 
-.filter {
+.route {
   display: inline-flex;
   flex: 1 0 0;
   align-items: center;
@@ -40,24 +41,15 @@
   font-size: 10.8px;
   line-height: 1.4;
   white-space: nowrap;
-  transition:
-    background-color 120ms ease,
-    opacity 120ms ease;
 }
 
 /* "Rickmansworth" keeps its natural width; the other two share the rest. */
-.filter:last-child {
+.route:last-child {
   flex: 0 0 auto;
 }
 
-.filterNumber {
+.routeCount {
   font-weight: 700;
-}
-
-.filterOff {
-  background: transparent;
-  border-color: rgb(255 255 255 / 0.55);
-  opacity: 0.75;
 }
 
 /* Desktop header (Figma "Desktop header", 1440 x 102) */
@@ -70,12 +62,12 @@
     padding: 28px;
   }
 
-  .filters {
+  .routes {
     flex: 0 0 auto;
   }
 
-  .filter,
-  .filter:last-child {
+  .route,
+  .route:last-child {
     flex: 0 0 auto;
   }
 }

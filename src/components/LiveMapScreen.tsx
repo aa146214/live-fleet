@@ -5,7 +5,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { countByRoute, getPlace, type PlaceId } from "@/lib/routes";
 import { useFleet } from "@/lib/use-fleet";
-import { useRouteFilter } from "@/lib/use-route-filter";
 import { AppHeader } from "./AppHeader";
 import { FadeThrough } from "./FadeThrough";
 import { PlaceDetails } from "./PlaceDetails";
@@ -24,22 +23,14 @@ const LIST_LIMIT = 6;
 
 export function LiveMapScreen() {
   const { snapshot, error } = useFleet();
-  const { activeRoutes, toggleRoute } = useRouteFilter();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const selectedParam = searchParams.get("vehicle");
   const selectedPlace = getPlace(searchParams.get("place")) ?? null;
 
-  const visibleVehicles = useMemo(
-    () =>
-      (snapshot?.vehicles ?? []).filter(
-        (vehicle) => vehicle.routeId === null || activeRoutes.has(vehicle.routeId),
-      ),
-    [snapshot, activeRoutes],
-  );
+  const visibleVehicles = useMemo(() => snapshot?.vehicles ?? [], [snapshot]);
   const selected = visibleVehicles.find((vehicle) => vehicle.code === selectedParam) ?? null;
-  // Counted over all vehicles, so turning a route filter off doesn't change its number.
   const routeCounts = useMemo(() => (snapshot ? countByRoute(snapshot.vehicles) : null), [snapshot]);
 
   const [expanded, setExpanded] = useState(false);
@@ -101,7 +92,7 @@ export function LiveMapScreen() {
 
   return (
     <div className={`${styles.screen} ${hasDetails ? styles.hasSelection : ""}`}>
-      <AppHeader routeCounts={routeCounts} activeRoutes={activeRoutes} onToggleRoute={toggleRoute} />
+      <AppHeader routeCounts={routeCounts} />
 
       {snapshot?.notice && !error && <p className={styles.notice}>{snapshot.notice}</p>}
 
@@ -131,11 +122,7 @@ export function LiveMapScreen() {
             {!snapshot ? (
               <p className={styles.empty}>{error ? "Could not load vehicles." : "Loading vehicles…"}</p>
             ) : visibleVehicles.length === 0 ? (
-              <p className={styles.empty}>
-                {snapshot.vehicles.length === 0
-                  ? "No minibuses are reporting a position right now."
-                  : "No minibuses on the selected routes."}
-              </p>
+              <p className={styles.empty}>No minibuses are reporting a position right now.</p>
             ) : (
               <>
                 <div id="vehicle-list" className={styles.list}>

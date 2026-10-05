@@ -1,5 +1,3 @@
-"use client";
-
 import Image from "next/image";
 import { ROUTES } from "@/lib/routes";
 import type { RouteId } from "@/lib/types";
@@ -8,11 +6,9 @@ import styles from "./AppHeader.module.css";
 interface AppHeaderProps {
   /** Minibuses assigned to each route; null while the first data is loading. */
   routeCounts: ReadonlyMap<RouteId, number> | null;
-  activeRoutes: ReadonlySet<RouteId>;
-  onToggleRoute: (id: RouteId) => void;
 }
 
-export function AppHeader({ routeCounts, activeRoutes, onToggleRoute }: AppHeaderProps) {
+export function AppHeader({ routeCounts }: AppHeaderProps) {
   return (
     <header className={styles.header}>
       <div className={styles.brand}>
@@ -20,26 +16,23 @@ export function AppHeader({ routeCounts, activeRoutes, onToggleRoute }: AppHeade
         <h1 className={styles.title}>Leavesden Shuttle Live Map</h1>
       </div>
 
-      <div className={styles.filters} role="group" aria-label="Show routes">
+      {/* Route key with live minibus counts (Figma "Route filters"); not interactive. */}
+      <ul className={styles.routes} aria-label="Minibuses per route">
         {ROUTES.map((route) => {
-          const active = activeRoutes.has(route.id);
           const count = routeCounts?.get(route.id);
           return (
-            <button
+            <li
               key={route.id}
-              type="button"
-              className={`${styles.filter} ${active ? "" : styles.filterOff}`}
+              className={styles.route}
               style={{ "--route": route.color } as React.CSSProperties}
-              aria-pressed={active}
               aria-label={`${route.name}: ${count ?? "loading"} minibus${count === 1 ? "" : "es"}`}
-              onClick={() => onToggleRoute(route.id)}
             >
-              <span className={styles.filterNumber}>{count ?? "–"}</span>
+              <span className={styles.routeCount}>{count ?? "–"}</span>
               <span>{route.name}</span>
-            </button>
+            </li>
           );
         })}
-      </div>
+      </ul>
     </header>
   );
 }

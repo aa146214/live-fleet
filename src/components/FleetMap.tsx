@@ -22,9 +22,9 @@ const FIT_PADDING: L.PointExpression = [48, 48];
 /** Bus marker artwork size (Figma "Vehicle Marker", pointing north at 0°). */
 const BUS_WIDTH = 33.35;
 const BUS_HEIGHT = 76;
-/** The Figma desktop map draws buses at full size; the mobile frames at ~56%. */
-const DESKTOP_BUS_SCALE = 1;
-const MOBILE_BUS_SCALE = 0.56;
+/** Drawn smaller than the Figma frames (100% desktop, ~56% mobile) to keep the map readable. */
+const DESKTOP_BUS_SCALE = 0.6;
+const MOBILE_BUS_SCALE = 0.42;
 
 /** Gap between a bus and its label. */
 const LABEL_GAP = 4;
@@ -84,8 +84,9 @@ function busBox(heading: number | null, scale: number): Size {
 const placementStyle = ({ x, y }: Placement) => `--lx:${x}px;--ly:${y}px`;
 
 /**
- * A bus pointing its direction of travel (upright with no arrow when parked),
- * with a label tag shown on hover/focus, or always when `labelled`.
+ * A bus pointing its heading: the direction of travel, or the way a parked bus last
+ * faced (upright with no arrow when that's unknown). Its label tag shows on
+ * hover/focus, or always when `labelled`.
  */
 function busIcon(
   { code, routeId, heading }: Pick<Vehicle, "code" | "routeId" | "heading">,
