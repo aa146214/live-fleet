@@ -1,5 +1,3 @@
-import type { FleetSnapshot } from "./types";
-
 const UPDATED_FORMAT = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Europe/London",
   day: "numeric",
@@ -17,10 +15,4 @@ export function formatUpdated(iso: string | null): string {
   if (!iso) return "Unknown";
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? "Unknown" : UPDATED_FORMAT.format(date);
-}
-
-export function liveStatusText(snapshot: FleetSnapshot | null): string {
-  if (!snapshot) return "● Connecting…";
-  const count = snapshot.vehicles.length;
-  return `● ${count} vehicle${count === 1 ? "" : "s"} · ${snapshot.mode}`;
 }

@@ -12,7 +12,8 @@ cp .env.example .env.local   # then add FLEETSMART_API_KEY
 npm run dev
 ```
 
-Without an API key the app shows the six illustrative minibuses from the design.
+Without an API key the app shows the six illustrative minibuses from the design. To force them
+while a key is set (e.g. for a design review), run with `FLEET_DEMO=1`.
 
 ## How it works
 
@@ -20,9 +21,11 @@ Without an API key the app shows the six illustrative minibuses from the design.
   on the server, so the API key never reaches the browser. Responses are cached for 10 seconds
   and concurrent requests are shared, keeping within FleetSmart's one-request-per-second limit.
 - The browser polls `/api/vehicles` every 15 seconds while the tab is visible.
-- The map uses Leaflet with OpenStreetMap tiles. Markers, rows, details cards and route filters
-  follow the Figma components; arrows show the direction of travel for moving vehicles.
-- Selecting a minibus updates the URL (`/?vehicle=W1`), so a specific minibus can be linked.
+- The map uses Leaflet with OpenStreetMap tiles. Bus markers, pins, rows, details cards and
+  route filters follow the updated Figma design. Moving buses point their direction of travel;
+  parked ones sit upright without the arrow.
+- Tapping the studio or a station pin shows its details (what3words, route, entrances).
+- Selections live in the URL (`/?vehicle=W1`, `/?place=station-1`), so they can be linked.
 
 ## Configure the shuttles
 
@@ -43,6 +46,6 @@ travel (towards the studio or towards the route's station).
 
 ## Before going live
 
-- Gate A/B and entrance locations still need confirming (`src/lib/routes.ts`).
+- The North/South Entrance locations still need confirming (`src/lib/routes.ts`).
 - The public OpenStreetMap tile server is for light use only; switch to a tile provider for
   production traffic.

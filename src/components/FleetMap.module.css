@@ -13,103 +13,57 @@
   font-family: inherit;
 }
 
-/* Vehicle marker (Figma "Vehicle marker", 60 x 44) */
+/* Bus marker (Figma "Vehicle Marker"): 70% opacity, full opacity with a route-colour
+   glow when selected. The icon box is square so any rotation fits inside it. */
 .vehicleIcon {
   background: none;
   border: none;
 }
 
-/* Holds the marker, halo and arrow so they shift together when spread out. */
 .marker {
   position: absolute;
   inset: 0;
 }
 
-.vehicle {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  width: 60px;
-  height: 44px;
-  padding: 4px;
-  border: 2px solid var(--color-white);
-  border-radius: 14px;
-  background: var(--route);
-  color: var(--color-white);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.4;
+.bus {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  width: 33.35px;
+  height: 76px;
+  opacity: 0.7;
   cursor: pointer;
+  transition:
+    opacity 150ms ease,
+    filter 150ms ease;
+}
+
+.bus svg {
+  display: block;
+}
+
+.vehicleIcon:hover .bus,
+.vehicleIcon:focus-visible .bus {
+  opacity: 1;
+}
+
+.selected .bus {
+  opacity: 1;
+  filter: drop-shadow(0 0 10px var(--route));
 }
 
 .vehicleIcon:focus-visible {
   outline: none;
 }
 
-.vehicleIcon:focus-visible .vehicle {
-  outline: 3px solid var(--color-blue);
-  outline-offset: 3px;
+.vehicleIcon:focus-visible .bus {
+  filter: drop-shadow(0 0 3px var(--color-blue)) drop-shadow(0 0 3px var(--color-blue));
 }
 
-.halo {
-  position: absolute;
-  inset: -8px;
-  border: 2px solid var(--color-blue);
-  border-radius: 22px;
-  background: var(--color-paleblue);
-}
-
-/* Compact overview marker (and callout anchor): heading arrow, or a dot when stopped */
-.compact .marker,
-.calloutIcon .marker {
-  display: grid;
-  place-items: center;
-}
-
-/* Selected pill drawn beside its dot/arrow when centring it would cover another minibus.
-   --lx/--ly hold the pill centre's offset from the vehicle position. */
-.callout {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) translate(var(--lx), var(--ly));
-}
-
-.calloutPill {
-  position: relative;
-  display: block;
-  height: 44px;
-}
-
-.heading {
-  filter: drop-shadow(0 1px 1.5px rgb(16 20 38 / 0.45));
-  cursor: pointer;
-  transition: scale 150ms ease;
-}
-
-.dot {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--color-white);
-  border-radius: 50%;
-  background: var(--route);
-  box-shadow: 0 1px 2px rgb(16 20 38 / 0.4);
-  cursor: pointer;
-  transition: scale 150ms ease;
-}
-
-/* `scale` composes with the inline rotate() on the arrow instead of replacing it. */
-.compact:hover .dot,
-.compact:hover .heading,
-.compact:focus-visible .dot,
-.compact:focus-visible .heading {
-  scale: 1.25;
-}
-
-/* --lx/--ly hold the label centre's offset from the vehicle, chosen to avoid other minibuses. */
-.hoverLabel {
+/* Label tag beside the bus. --lx/--ly hold its centre's offset from the bus,
+   chosen to avoid other buses and pins. Shown on hover/focus, or when labelled. */
+.label {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -135,8 +89,9 @@
     visibility 0s linear 150ms;
 }
 
-.compact:hover .hoverLabel,
-.compact:focus-visible .hoverLabel {
+.vehicleIcon:hover .label,
+.vehicleIcon:focus-visible .label,
+.labelled .label {
   visibility: visible;
   opacity: 1;
   transform: translate(-50%, -50%) translate(var(--lx), var(--ly)) scale(1);
@@ -146,74 +101,45 @@
     visibility 0s;
 }
 
-/* A newly selected minibus grows from its dot or arrow into the labelled marker. */
-.popIn {
-  animation: pop-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+.labelIn {
+  animation: label-in 200ms ease-out;
 }
 
-@keyframes pop-in {
+@keyframes label-in {
   from {
     opacity: 0;
-    transform: scale(0.4);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .heading,
-  .dot,
-  .hoverLabel,
-  .compact:hover .hoverLabel,
-  .compact:focus-visible .hoverLabel {
-    transition: none;
-  }
+/* Studio and station pins: tappable for location details. */
+.pinIcon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: filter 150ms ease;
+}
 
-  .popIn {
-    animation: none;
+.pinIcon img {
+  display: block;
+  /* Scale about the pin's tip so it stays on the location (mobile frames use ~56%). */
+  transform-origin: 50% 94%;
+}
+
+@media (max-width: 899px) {
+  .pinIcon img {
+    scale: 0.56;
   }
 }
 
-.compact:focus-visible .dot,
-.compact:focus-visible .heading {
+.pinIcon:hover,
+.pinSelected {
+  filter: drop-shadow(0 2px 6px rgb(16 20 38 / 0.45));
+}
+
+.pinIcon:focus-visible {
   outline: 3px solid var(--color-blue);
   outline-offset: 2px;
   border-radius: 50%;
-}
-
-/* Direction-of-travel arrow orbits the marker at the vehicle's heading. */
-.arrow {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%) rotate(var(--heading)) translateY(calc(-1 * var(--orbit)));
-  pointer-events: none;
-}
-
-/* Point-of-interest label (Figma "Point of interest") */
-.poiIcon {
-  background: none;
-  border: none;
-}
-
-.poi {
-  display: inline-flex;
-  align-items: flex-start;
-  gap: 5px;
-  padding: 6px;
-  border-radius: 8px;
-  background: var(--color-white);
-  color: var(--color-navy);
-  font-size: 10px;
-  line-height: 1.4;
-  white-space: nowrap;
-  transform: translate(-11px, -50%);
-}
-
-.poi span {
-  font-size: 9px;
 }
 
 .north {
@@ -224,7 +150,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 36px;
+  width: 28px;
   padding: 7px;
   border-radius: 18px;
   background: var(--color-white);
@@ -240,7 +166,7 @@
 .controls {
   position: absolute;
   right: 14px;
-  bottom: 32px;
+  bottom: 52px;
   z-index: 1000;
   display: flex;
   flex-direction: column;
@@ -280,7 +206,27 @@
 }
 
 @media (min-width: 900px) {
+  .controls {
+    bottom: 57px;
+  }
+
   .attribution {
+    bottom: 25px;
     font-size: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bus,
+  .label,
+  .vehicleIcon:hover .label,
+  .vehicleIcon:focus-visible .label,
+  .labelled .label,
+  .pinIcon {
+    transition: none;
+  }
+
+  .labelIn {
+    animation: none;
   }
 }

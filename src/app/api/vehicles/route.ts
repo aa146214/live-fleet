@@ -5,7 +5,8 @@ import { getLiveSnapshot, hasFleetSmartCredentials } from "@/lib/fleetsmart";
 export async function GET() {
   await connection();
 
-  if (!hasFleetSmartCredentials()) {
+  // FLEET_DEMO=1 forces the design's illustrative vehicles (e.g. for design reviews).
+  if (process.env.FLEET_DEMO === "1" || !hasFleetSmartCredentials()) {
     return Response.json(demoSnapshot(), { headers: { "Cache-Control": "no-store" } });
   }
 

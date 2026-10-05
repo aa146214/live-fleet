@@ -1,4 +1,4 @@
-import { getRoute, STUDIO_DESTINATION, STUDIO_LOCATION, type LatLng } from "./routes";
+import { getRoute, SOUTH_ENTRANCE_LOCATION, STUDIO_DESTINATION, type LatLng } from "./routes";
 import type { RouteId, VehicleStatus } from "./types";
 
 const EARTH_RADIUS_M = 6_371_000;
@@ -41,7 +41,7 @@ export function estimateNextDestination(
   if (!route) return "Not on a shuttle route";
 
   const ends = [
-    { name: STUDIO_DESTINATION, location: STUDIO_LOCATION },
+    { name: STUDIO_DESTINATION, location: SOUTH_ENTRANCE_LOCATION },
     { name: route.station, location: route.stationLocation },
   ];
 

@@ -17,10 +17,14 @@ export interface ShuttleRoute {
   stationLocation: LatLng;
 }
 
-export const STUDIO_DESTINATION = "Leavesden studio · Gate B";
+/** Where shuttles drop off at the studio; the first stop after leaving a station. */
+export const STUDIO_DESTINATION = "Leavesden studio · South Entrance";
+export const STUDIO_DESTINATION_SHORT = "South Entrance";
 
-// Gate A/B positions still need confirming, so both gates use the studio location.
+/** Leavesden studio (where the WB pin sits on the map). */
 export const STUDIO_LOCATION: LatLng = { lat: 51.6906, lng: -0.418 };
+/** ///goes.forget.lions; used to estimate whether a shuttle is heading to the studio. */
+export const SOUTH_ENTRANCE_LOCATION: LatLng = { lat: 51.686408, lng: -0.417123 };
 
 export const ROUTES: ShuttleRoute[] = [
   {
@@ -57,19 +61,46 @@ export const ENTRANCES = [
   { name: "South Entrance", detail: "///goes.forget.lions" },
 ];
 
-export const POINTS_OF_INTEREST: Array<{ name: string } & LatLng> = [
-  { name: "Leavesden studio", ...STUDIO_LOCATION },
-  { name: "St Albans station", ...ROUTES[1].stationLocation },
-  { name: "Watford Junction", ...ROUTES[0].stationLocation },
-  { name: "Rickmansworth station", ...ROUTES[2].stationLocation },
+export type PlaceId = "studio" | "station-1" | "station-2" | "station-3";
+
+/** Map pins: the studio and each route's station. Tapping one shows its details. */
+export interface Place extends LatLng {
+  id: PlaceId;
+  name: string;
+  /** The station's route; null for the studio, which every route serves. */
+  routeId: RouteId | null;
+}
+
+export const PLACES: Place[] = [
+  { id: "studio", name: "Leavesden studio", routeId: null, ...STUDIO_LOCATION },
+  ...ROUTES.map((route) => ({
+    id: `station-${route.id}` as PlaceId,
+    name: route.station,
+    routeId: route.id,
+    ...route.stationLocation,
+  })),
 ];
+
+export function getPlace(id: string | null): Place | undefined {
+  return PLACES.find((place) => place.id === id);
+}
 
 export function getRoute(id: RouteId | null): ShuttleRoute | undefined {
   return ROUTES.find((route) => route.id === id);
 }
 
 export function routeSequence(route: ShuttleRoute): string {
-  return `${route.terminus} → Gate B → Gate A → ${route.terminus}`;
+  return `${route.terminus} → South Entrance → North Entrance → ${route.terminus}`;
+}
+
+/** e.g. "Route 1 · Watford Station" */
+export function routeSubtitle(route: ShuttleRoute): string {
+  return `Route ${route.id} · ${route.name} Station`;
+}
+
+/** The details card shortens the studio stop to just the entrance. */
+export function shortDestination(destination: string): string {
+  return destination === STUDIO_DESTINATION ? STUDIO_DESTINATION_SHORT : destination;
 }
 
 /** How many of the given minibuses are assigned to each route (unassigned ones aren't counted). */

@@ -1,7 +1,13 @@
-<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="24" height="28" viewBox="0 0 24 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="21.3943" height="21.3943" viewBox="0 0 21.3943 21.3943" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g id="Frame">
-<path id="Vector" d="M16 2H8C5.79086 2 4 3.79086 4 6V19C4 21.2091 5.79086 23 8 23H16C18.2091 23 20 21.2091 20 19V6C20 3.79086 18.2091 2 16 2Z" stroke="white" stroke-width="2"/>
-<path id="Vector_2" d="M5 8H19M7 23V26M17 23V26" stroke="white" stroke-width="2"/>
-<path id="Vector_3" d="M8 18H9M15 18H16" stroke="white" stroke-width="3" stroke-linecap="round"/>
+<path id="Vector" d="M3.56571 5.34857L1.78286 6.24" stroke="white" stroke-width="1.78286" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_2" d="M8.91429 5.34857H12.48" stroke="white" stroke-width="1.78286" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_3" d="M19.6114 6.24L17.8286 5.34857" stroke="white" stroke-width="1.78286" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_4" d="M16.0457 2.67429H5.34857C4.36393 2.67429 3.56571 3.4725 3.56571 4.45714V15.1543C3.56571 16.1389 4.36393 16.9371 5.34857 16.9371H16.0457C17.0304 16.9371 17.8286 16.1389 17.8286 15.1543V4.45714C17.8286 3.4725 17.0304 2.67429 16.0457 2.67429Z" stroke="white" stroke-width="1.78286" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_5" d="M3.56571 9.80571H17.8286" stroke="white" stroke-width="1.78286" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_6" d="M7.13143 13.3714H7.14034" stroke="white" stroke-width="1.78286" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_7" d="M14.2629 13.3714H14.2718" stroke="white" stroke-width="1.78286" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_8" d="M5.34857 16.9371V18.72" stroke="white" stroke-width="1.78286" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Vector_9" d="M16.0457 18.72V16.9371" stroke="white" stroke-width="1.78286" stroke-linecap="round" stroke-linejoin="round"/>
 </g>
 </svg>

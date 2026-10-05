@@ -3,14 +3,12 @@
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { liveStatusText } from "@/lib/format";
-import { countByRoute } from "@/lib/routes";
+import { countByRoute, getPlace, type PlaceId } from "@/lib/routes";
 import { useFleet } from "@/lib/use-fleet";
 import { useRouteFilter } from "@/lib/use-route-filter";
 import { AppHeader } from "./AppHeader";
-import { BottomNav } from "./BottomNav";
-import { DemoNotice } from "./DemoNotice";
 import { FadeThrough } from "./FadeThrough";
+import { PlaceDetails } from "./PlaceDetails";
 import { VehicleDetails } from "./VehicleDetails";
 import { VehicleRow } from "./VehicleRow";
 import styles from "./LiveMapScreen.module.css";
@@ -31,6 +29,7 @@ export function LiveMapScreen() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const selectedParam = searchParams.get("vehicle");
+  const selectedPlace = getPlace(searchParams.get("place")) ?? null;
 
   const visibleVehicles = useMemo(
     () =>
@@ -63,46 +62,46 @@ export function LiveMapScreen() {
   // once the fade-through has swapped in the new card (and its final height).
   const detailsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!selected) return;
+    if (!selected && !selectedPlace) return;
     const timer = setTimeout(
       () => detailsRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
       120,
     );
     return () => clearTimeout(timer);
-  }, [selected?.code]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selected?.code, selectedPlace?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const select = useCallback(
-    (code: string | null) => {
+  /** Selects a minibus or a map pin (one at a time), or clears the selection; kept in the URL. */
+  const setSelection = useCallback(
+    (selection: { vehicle?: string; place?: PlaceId } | null) => {
       const params = new URLSearchParams(searchParams.toString());
-      if (code) params.set("vehicle", code);
-      else params.delete("vehicle");
+      params.delete("vehicle");
+      params.delete("place");
+      if (selection?.vehicle) params.set("vehicle", selection.vehicle);
+      if (selection?.place) params.set("place", selection.place);
       const query = params.toString();
       router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
     },
     [pathname, router, searchParams],
   );
+  const select = useCallback((code: string | null) => setSelection(code ? { vehicle: code } : null), [setSelection]);
+  const selectPlace = useCallback((id: PlaceId) => setSelection({ place: id }), [setSelection]);
+  const clearSelection = useCallback(() => setSelection(null), [setSelection]);
 
+  const hasDetails = Boolean(selected || selectedPlace);
   useEffect(() => {
-    if (!selected) return;
+    if (!hasDetails) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") select(null);
+      if (event.key === "Escape") clearSelection();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selected, select]);
+  }, [hasDetails, clearSelection]);
 
   const mode = snapshot?.mode ?? null;
 
   return (
-    <div className={`${styles.screen} ${selected ? styles.hasSelection : ""}`}>
-      <AppHeader
-        title="Live map"
-        status={liveStatusText(snapshot)}
-        routeCounts={routeCounts}
-        activeRoutes={activeRoutes}
-        onToggleRoute={toggleRoute}
-        page="map"
-      />
+    <div className={`${styles.screen} ${hasDetails ? styles.hasSelection : ""}`}>
+      <AppHeader routeCounts={routeCounts} activeRoutes={activeRoutes} onToggleRoute={toggleRoute} />
 
       {snapshot?.notice && !error && <p className={styles.notice}>{snapshot.notice}</p>}
 
@@ -119,12 +118,14 @@ export function LiveMapScreen() {
             vehicles={visibleVehicles}
             selectedCode={selected?.code ?? null}
             onSelect={select}
+            selectedPlaceId={selectedPlace?.id ?? null}
+            onSelectPlace={selectPlace}
             mode={mode}
           />
         </div>
 
         <aside className={styles.panel} aria-label="Vehicles">
-          <div className={styles.listSection}>
+          <div className={`${styles.listSection} ${hasDetails ? styles.withDetails : ""}`}>
             <h2 className={styles.panelTitle}>All vehicles</h2>
             <p className={styles.panelHint}>Select a minibus to see its details.</p>
             {!snapshot ? (
@@ -167,30 +168,21 @@ export function LiveMapScreen() {
           </div>
 
           <div ref={detailsRef}>
-            <FadeThrough contentKey={selected && mode ? selected.code : ""}>
-              {selected && mode ? (
-                <VehicleDetails vehicle={selected} mode={mode} onClose={() => select(null)} />
+            <FadeThrough contentKey={selected ? `vehicle:${selected.code}` : selectedPlace ? `place:${selectedPlace.id}` : ""}>
+              {selected ? (
+                <VehicleDetails vehicle={selected} onClose={clearSelection} />
+              ) : selectedPlace ? (
+                <PlaceDetails place={selectedPlace} routeCounts={routeCounts} onClose={clearSelection} />
               ) : (
-                <>
-                  <p className={styles.chooseHint}>
-                    Choose a minibus on the map or in this list. Arrows show direction of travel;
-                    dots are stopped.
-                  </p>
-                  <div className={styles.guidance}>
-                    <p className={styles.guidanceTitle}>Tap a minibus for details</p>
-                    <p className={styles.guidanceText}>
-                      Arrows show direction of travel · dots are stopped
-                    </p>
-                  </div>
-                </>
+                <div className={styles.guidance}>
+                  <p className={styles.guidanceTitle}>Tap a minibus or location for details</p>
+                  <p className={styles.guidanceText}>Arrows show the direction of travel</p>
+                </div>
               )}
             </FadeThrough>
           </div>
         </aside>
       </main>
-
-      <BottomNav page="map" />
-      <DemoNotice mode={mode} />
     </div>
   );
 }

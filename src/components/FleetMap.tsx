@@ -3,40 +3,47 @@
 import L from "leaflet";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
-import { labelsFit } from "@/lib/label-fit";
-import { placeLabel, placementsAround, type Box, type Placement } from "@/lib/label-placement";
-import { getRoute, POINTS_OF_INTEREST, routeColor } from "@/lib/routes";
+import {
+  firstClear,
+  placeLabel,
+  placementsAround,
+  type Box,
+  type Placement,
+  type Size,
+} from "@/lib/label-placement";
+import { getRoute, PLACES, routeColor, type Place, type PlaceId } from "@/lib/routes";
 import type { FleetSnapshot, Vehicle } from "@/lib/types";
 import styles from "./FleetMap.module.css";
 
 const DEFAULT_CENTER: L.LatLngTuple = [51.695, -0.405];
 const DEFAULT_ZOOM = 12;
 const FIT_PADDING: L.PointExpression = [48, 48];
-const MARKER_HEIGHT = 44;
-/** Compact arrow/dot markers are this many pixels square. */
-const COMPACT_SIZE = 24;
-/** Clear space labels need between them before they are all shown. */
-const LABEL_SPACING = 8;
-/** Moving minibuses need extra room for the direction arrow orbiting the label. */
-const ARROW_CLEARANCE = 24;
-/** Gap between a marker and its hover label / selected callout pill. */
-const LABEL_GAP = 4;
-const PILL_GAP = 6;
-/** Hover label size: 11px bold code beside a 14px bus icon. */
-const HOVER_LABEL_HEIGHT = 26;
-const hoverLabelWidth = (code: string) => Math.round(36 + code.length * 7.5);
-/** Place-name label geometry (see .poi in the stylesheet): starts 11px left of its point. */
-const POI_LABEL_HEIGHT = 26;
-const POI_LABEL_OFFSET_X = -11;
-const poiLabelWidth = (name: string) => Math.round(14 + name.length * 6.2);
 
-// Shuttle codes fit the 60px Figma marker; registrations (unassigned vehicles) need more room.
-const markerWidth = (code: string) => Math.max(60, Math.round(36 + code.length * 8));
+/** Bus marker artwork size (Figma "Vehicle Marker", pointing north at 0°). */
+const BUS_WIDTH = 33.35;
+const BUS_HEIGHT = 76;
+/** The Figma desktop map draws buses at full size; the mobile frames at ~56%. */
+const DESKTOP_BUS_SCALE = 1;
+const MOBILE_BUS_SCALE = 0.56;
+
+/** Gap between a bus and its label. */
+const LABEL_GAP = 4;
+/** Label tag size: 11px bold code beside a 14px bus icon. */
+const LABEL_HEIGHT = 26;
+const labelWidth = (code: string) => Math.round(36 + code.length * 7.5);
+
+/** Pin artwork: the tip (the real location) is near the bottom centre. */
+const PIN_GEOMETRY = {
+  station: { width: 43, height: 43, tipX: 21.5, tipY: 40.4 },
+  studio: { width: 52, height: 63.3, tipX: 26, tipY: 62.8 },
+};
 
 export interface FleetMapProps {
   vehicles: Vehicle[];
   selectedCode: string | null;
   onSelect: (code: string) => void;
+  selectedPlaceId: PlaceId | null;
+  onSelectPlace: (id: PlaceId) => void;
   mode: FleetSnapshot["mode"] | null;
 }
 
@@ -44,41 +51,63 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 }
 
-/** Distance from the marker centre to just outside its edge along the heading. */
-function arrowOrbit(width: number, heading: number): number {
-  const radians = (heading * Math.PI) / 180;
-  const toSide = Math.abs(Math.sin(radians)) > 1e-6 ? width / 2 / Math.abs(Math.sin(radians)) : Infinity;
-  const toTopOrBottom =
-    Math.abs(Math.cos(radians)) > 1e-6 ? MARKER_HEIGHT / 2 / Math.abs(Math.cos(radians)) : Infinity;
-  return Math.round(Math.min(toSide, toTopOrBottom) + 12);
+/**
+ * The Figma "Vehicle Marker" bus (body, windows and a direction arrow at its nose),
+ * filled with the route colour. Drawn from code rather than the exported SVGs so
+ * every route — not just the blue one exported — gets the selected glow.
+ */
+function busSvg(color: string, showArrow: boolean): string {
+  return `<svg width="${BUS_WIDTH}" height="${BUS_HEIGHT}" viewBox="0 0 33.3506 75.9848" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M24.2114 13.8645H9.13928C8.54572 13.8645 7.98283 14.1281 7.60284 14.5841L0.963557 22.5513C0.664032 22.9107 0.5 23.3638 0.5 23.8316L0.5 73.4848C0.5 74.5893 1.39543 75.4848 2.5 75.4848H30.8506C31.9552 75.4848 32.8506 74.5893 32.8506 73.4848V23.8316C32.8506 23.3638 32.6866 22.9107 32.3871 22.5513L25.7478 14.5841C25.3678 14.1281 24.8049 13.8645 24.2114 13.8645Z" fill="${color}" stroke="white"/>
+    <path d="M29.7697 25.4184H3.58112V28.4994L6.66213 33.1209H26.6887L29.7697 28.4994V25.4184Z" fill="white" fill-opacity="0.2"/>
+    <path d="M5.12156 35.4315L2.8108 32.3505L2.8108 70.8632H5.12156L5.12156 35.4315Z" fill="white" fill-opacity="0.2"/>
+    <path d="M28.2292 35.4317L30.5399 32.3507L30.5399 70.8634H28.2292L28.2292 35.4317Z" fill="white" fill-opacity="0.2"/>
+    ${
+      showArrow
+        ? `<path d="M16.2669 1.44623C16.4661 1.16398 16.8841 1.16406 17.0833 1.44623L22.4915 9.11029C22.7253 9.44151 22.4887 9.89838 22.0833 9.89838H11.2669C10.8617 9.8982 10.6252 9.44143 10.8587 9.11029L16.2669 1.44623Z" fill="${color}" stroke="white"/>`
+        : ""
+    }
+  </svg>`;
 }
 
-/** Route-coloured arrow for a moving minibus (pointing its heading), or a dot when stopped. */
-function glyphHtml({ routeId, heading }: Pick<Vehicle, "routeId" | "heading">): string {
-  // Unassigned vehicles borrow the dark route-2 arrow to match their navy colour.
-  return heading === null
-    ? `<span class="${styles.dot}" style="--route:${routeColor(routeId)}"></span>`
-    : `<img class="${styles.heading}" src="/icons/arrow-route${routeId ?? 2}.svg" width="18" height="22" alt="" style="transform:rotate(${heading}deg)">`;
+/** Screen-space bounding box of a bus rotated to `heading` (null = parked, upright). */
+function busBox(heading: number | null, scale: number): Size {
+  const radians = ((heading ?? 0) * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(radians));
+  const sin = Math.abs(Math.sin(radians));
+  return {
+    width: scale * (BUS_WIDTH * cos + BUS_HEIGHT * sin),
+    height: scale * (BUS_WIDTH * sin + BUS_HEIGHT * cos),
+  };
 }
 
 const placementStyle = ({ x, y }: Placement) => `--lx:${x}px;--ly:${y}px`;
 
 /**
- * Overview marker: an arrow or dot. Its label appears on hover or focus at
- * `hoverPlacement`, chosen so it doesn't cover neighbouring minibuses.
+ * A bus pointing its direction of travel (upright with no arrow when parked),
+ * with a label tag shown on hover/focus, or always when `labelled`.
  */
-function compactIcon(
+function busIcon(
   { code, routeId, heading }: Pick<Vehicle, "code" | "routeId" | "heading">,
-  hoverPlacement: Placement,
+  scale: number,
+  selected: boolean,
+  labelled: boolean,
+  animateLabel: boolean,
+  placement: Placement,
 ): L.DivIcon {
+  const color = routeColor(routeId);
+  const size = Math.ceil(BUS_HEIGHT * scale);
+  const classes = [styles.vehicleIcon, selected ? styles.selected : "", labelled ? styles.labelled : ""];
   return L.divIcon({
-    className: `${styles.vehicleIcon} ${styles.compact}`,
-    iconSize: [COMPACT_SIZE, COMPACT_SIZE],
-    iconAnchor: [COMPACT_SIZE / 2, COMPACT_SIZE / 2],
+    className: classes.join(" "),
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
     html: `
-      <span class="${styles.marker}">
-        ${glyphHtml({ routeId, heading })}
-        <span class="${styles.hoverLabel}" style="--route:${routeColor(routeId)};${placementStyle(hoverPlacement)}">
+      <span class="${styles.marker}" style="--route:${color}">
+        <span class="${styles.bus}" style="transform:translate(-50%, -50%) rotate(${heading ?? 0}deg) scale(${scale})">
+          ${busSvg(color, heading !== null)}
+        </span>
+        <span class="${styles.label} ${animateLabel ? styles.labelIn : ""}" style="${placementStyle(placement)}">
           <img src="/icons/bus-marker.svg" width="14" height="17" alt="">
           <span>${escapeHtml(code)}</span>
         </span>
@@ -86,109 +115,51 @@ function compactIcon(
   });
 }
 
-function pillHtml(code: string, routeId: Vehicle["routeId"], selected: boolean): string {
-  return `
-    ${selected ? `<span class="${styles.halo}"></span>` : ""}
-    <span class="${styles.vehicle}" style="--route:${routeColor(routeId)};width:${markerWidth(code)}px">
-      <img src="/icons/bus-marker.svg" width="18" height="22" alt="">
-      <span>${escapeHtml(code)}</span>
-    </span>`;
-}
-
-/**
- * The Figma marker: a pill with the bus icon and code. Centred on the minibus
- * (with an orbiting direction arrow) when that covers nothing; otherwise drawn
- * as a callout beside the minibus's arrow or dot at `placement`.
- */
-function labelledIcon(
-  { code, routeId, heading }: Pick<Vehicle, "code" | "routeId" | "heading">,
-  selected: boolean,
-  animateIn: boolean,
-  placement: Placement,
-): L.DivIcon {
-  const pop = animateIn ? styles.popIn : "";
-
-  if (placement.x !== 0 || placement.y !== 0) {
-    return L.divIcon({
-      className: `${styles.vehicleIcon} ${styles.calloutIcon}`,
-      iconSize: [COMPACT_SIZE, COMPACT_SIZE],
-      iconAnchor: [COMPACT_SIZE / 2, COMPACT_SIZE / 2],
-      html: `
-        <span class="${styles.marker}">
-          ${glyphHtml({ routeId, heading })}
-          <span class="${styles.callout}" style="${placementStyle(placement)}">
-            <span class="${styles.calloutPill} ${pop}" style="width:${markerWidth(code)}px">${pillHtml(code, routeId, selected)}</span>
-          </span>
-        </span>`,
-    });
-  }
-
-  const width = markerWidth(code);
-  const arrow =
-    heading === null
-      ? ""
-      : `<img class="${styles.arrow}" src="/icons/arrow-route${routeId ?? 2}.svg" width="16" height="20" alt="" style="--heading:${heading}deg;--orbit:${arrowOrbit(width, heading)}px">`;
+function pinIcon(place: Place, selected: boolean): L.DivIcon {
+  const geometry = place.routeId === null ? PIN_GEOMETRY.studio : PIN_GEOMETRY.station;
+  const src = place.routeId === null ? "/icons/pin-studio.svg" : `/icons/pin-route${place.routeId}.svg`;
   return L.divIcon({
-    className: styles.vehicleIcon,
-    iconSize: [width, MARKER_HEIGHT],
-    iconAnchor: [width / 2, MARKER_HEIGHT / 2],
-    html: `
-      <span class="${styles.marker} ${pop}">
-        ${pillHtml(code, routeId, selected)}
-        ${arrow}
-      </span>`,
+    className: `${styles.pinIcon} ${selected ? styles.pinSelected : ""}`,
+    iconSize: [geometry.width, geometry.height],
+    iconAnchor: [geometry.tipX, geometry.tipY],
+    html: `<img src="${src}" width="${geometry.width}" height="${geometry.height}" alt="">`,
   });
 }
 
-function poiIcon(name: string): L.DivIcon {
-  return L.divIcon({
-    className: styles.poiIcon,
-    iconSize: undefined,
-    html: `<span class="${styles.poi}"><span aria-hidden="true">●</span><b>${escapeHtml(name)}</b></span>`,
-  });
-}
-
-/**
- * A minibus on the map: a compact arrow or dot, expanded to the labelled Figma
- * marker when `labelled` (selected, or there is room for every label).
- * Hovering or focusing a compact marker shows its label.
- */
 function VehicleMarker({
   vehicle,
+  scale,
   selected,
   labelled,
   placement,
   onSelect,
 }: {
   vehicle: Vehicle;
+  scale: number;
   selected: boolean;
   labelled: boolean;
-  /** Label position: the pill when labelled, otherwise the hover label. */
   placement: Placement;
   onSelect: (code: string) => void;
 }) {
   const { code, routeId, heading } = vehicle;
   const { x, y } = placement;
 
-  // Animate only the moment the label appears; later icon rebuilds (new heading) stay still.
+  // Fade the label in only when it first appears; later icon rebuilds (new heading) stay still.
   const [wasLabelled, setWasLabelled] = useState(labelled);
-  const [animateIn, setAnimateIn] = useState(false);
+  const [animateLabel, setAnimateLabel] = useState(false);
   if (labelled !== wasLabelled) {
     setWasLabelled(labelled);
-    setAnimateIn(labelled);
+    setAnimateLabel(labelled);
   }
   useEffect(() => {
-    if (!animateIn) return;
-    const timer = setTimeout(() => setAnimateIn(false), 300);
+    if (!animateLabel) return;
+    const timer = setTimeout(() => setAnimateLabel(false), 300);
     return () => clearTimeout(timer);
-  }, [animateIn]);
+  }, [animateLabel]);
 
   const icon = useMemo(
-    () =>
-      labelled
-        ? labelledIcon({ code, routeId, heading }, selected, animateIn, { x, y })
-        : compactIcon({ code, routeId, heading }, { x, y }),
-    [code, routeId, heading, selected, labelled, animateIn, x, y],
+    () => busIcon({ code, routeId, heading }, scale, selected, labelled, animateLabel, { x, y }),
+    [code, routeId, heading, scale, selected, labelled, animateLabel, x, y],
   );
   const route = getRoute(routeId);
   const label = `Minibus ${code}${route ? `, Route ${route.id} ${route.name}` : ""}`;
@@ -206,16 +177,23 @@ function VehicleMarker({
   );
 }
 
-const CENTRED: Placement = { x: 0, y: 0 };
-const compactBox = (x: number, y: number): Box => ({ x, y, width: COMPACT_SIZE, height: COMPACT_SIZE });
 const roundPlacement = ({ x, y }: Placement): Placement => ({ x: Math.round(x), y: Math.round(y) });
+const relativeTo = (origin: { x: number; y: number }) => (box: Box): Box => ({
+  ...box,
+  x: box.x - origin.x,
+  y: box.y - origin.y,
+});
 
 /**
- * Draws the minibuses. When every minibus in view could show its full label
- * without touching another, all of them do; otherwise they stay compact, and
- * the selected pill and hover labels are placed where they cover no other minibus.
+ * Draws the buses and lays out their labels. When every bus in view can show its
+ * label without touching another bus, label or pin, all labels show; otherwise
+ * only the selected one does, and hover labels are placed clear of other buses.
  */
-function VehicleLayer({ vehicles, selectedCode, onSelect }: Omit<FleetMapProps, "mode">) {
+function VehicleLayer({
+  vehicles,
+  selectedCode,
+  onSelect,
+}: Pick<FleetMapProps, "vehicles" | "selectedCode" | "onSelect">) {
   const map = useMap();
   // Bumped whenever the view changes so the label layout re-runs.
   const [viewVersion, setViewVersion] = useState(0);
@@ -227,94 +205,96 @@ function VehicleLayer({ vehicles, selectedCode, onSelect }: Omit<FleetMapProps, 
 
   const layout = useMemo(() => {
     void viewVersion;
+    const scale = map.getSize().x >= 600 ? DESKTOP_BUS_SCALE : MOBILE_BUS_SCALE;
     const bounds = map.getBounds();
-    const point = (vehicle: Vehicle) => map.latLngToContainerPoint([vehicle.lat, vehicle.lng]);
+    const nearby = vehicles.filter((v) => bounds.pad(0.2).contains([v.lat, v.lng]));
+    const inView = new Set(nearby.filter((v) => bounds.contains([v.lat, v.lng])).map((v) => v.id));
 
-    const showAllLabels = labelsFit(
-      vehicles
-        .filter((vehicle) => bounds.contains([vehicle.lat, vehicle.lng]))
-        .map((vehicle) => {
-          const { x, y } = point(vehicle);
-          return {
-            x,
-            y,
-            width: markerWidth(vehicle.code),
-            height: MARKER_HEIGHT,
-            margin: vehicle.heading === null ? LABEL_SPACING : ARROW_CLEARANCE,
-          };
-        }),
+    const busBoxes = new Map(
+      nearby.map((v) => {
+        const { x, y } = map.latLngToContainerPoint([v.lat, v.lng]);
+        return [v.id, { x, y, ...busBox(v.heading, scale) }];
+      }),
     );
-    const result = new Map<string, { labelled: boolean; placement: Placement }>();
-    if (showAllLabels) {
-      for (const vehicle of vehicles) result.set(vehicle.id, { labelled: true, placement: CENTRED });
-      return result;
-    }
-
-    // Every minibus near the view, in screen pixels, so labels can avoid them.
-    const screen = new Map(
-      vehicles
-        .filter((vehicle) => bounds.pad(0.2).contains([vehicle.lat, vehicle.lng]))
-        .map((vehicle) => [vehicle.id, point(vehicle)]),
-    );
-    const obstaclesAround = (vehicle: Vehicle, extra: Box[] = []): Box[] => {
-      const origin = screen.get(vehicle.id);
-      if (!origin) return [];
-      return [
-        ...[...screen]
-          .filter(([id]) => id !== vehicle.id)
-          .map(([, other]) => compactBox(other.x, other.y)),
-        ...extra,
-      ].map((box) => ({ ...box, x: box.x - origin.x, y: box.y - origin.y }));
-    };
-
-    // Place-name labels are avoided too, but covering one beats covering a minibus.
-    const poiBoxes: Box[] = POINTS_OF_INTEREST.map((poi) => {
-      const { x, y } = map.latLngToContainerPoint([poi.lat, poi.lng]);
-      const width = poiLabelWidth(poi.name);
-      return { x: x + POI_LABEL_OFFSET_X + width / 2, y, width, height: POI_LABEL_HEIGHT };
+    const pinBoxes: Box[] = PLACES.map((place) => {
+      const g = place.routeId === null ? PIN_GEOMETRY.studio : PIN_GEOMETRY.station;
+      const { x, y } = map.latLngToContainerPoint([place.lat, place.lng]);
+      return { x: x - g.tipX + g.width / 2, y: y - g.tipY + g.height / 2, width: g.width, height: g.height };
     });
-    const poiObstaclesAround = (vehicle: Vehicle): Box[] => {
-      const origin = screen.get(vehicle.id);
-      if (!origin) return [];
-      return poiBoxes.map((box) => ({ ...box, x: box.x - origin.x, y: box.y - origin.y }));
+
+    const candidatesFor = (v: Vehicle) => {
+      const box = busBoxes.get(v.id)!;
+      return placementsAround(
+        { halfWidth: box.width / 2, halfHeight: box.height / 2 },
+        { width: labelWidth(v.code), height: LABEL_HEIGHT },
+        LABEL_GAP,
+      );
+    };
+    const otherBuses = (v: Vehicle) => [...busBoxes].filter(([id]) => id !== v.id).map(([, box]) => box);
+    const labelBox = (v: Vehicle, p: Placement): Box => {
+      const { x, y } = busBoxes.get(v.id)!;
+      return { x: x + p.x, y: y + p.y, width: labelWidth(v.code), height: LABEL_HEIGHT };
     };
 
-    // The selected pill: centred if that covers nothing, else a callout beside its dot.
-    const selected = vehicles.find((vehicle) => vehicle.code === selectedCode);
-    let selectedBox: Box | null = null;
-    if (selected) {
-      const size = { width: markerWidth(selected.code), height: MARKER_HEIGHT };
-      const candidates = [CENTRED, ...placementsAround(COMPACT_SIZE / 2, size, PILL_GAP)];
-      const placement = roundPlacement(
-        placeLabel(size, candidates, obstaclesAround(selected), PILL_GAP, poiObstaclesAround(selected)),
+    const result = new Map<string, { labelled: boolean; placement: Placement }>();
+    const fallback = (v: Vehicle) => placementsAround(12, { width: labelWidth(v.code), height: LABEL_HEIGHT }, LABEL_GAP)[0];
+
+    // Can every bus in view show its label at once? Place them one by one, each
+    // avoiding buses, pins and the labels already placed.
+    const placedLabels: Box[] = [];
+    const allLabels = new Map<string, Placement>();
+    let allFit = true;
+    for (const v of nearby.filter((v) => inView.has(v.id))) {
+      const origin = busBoxes.get(v.id)!;
+      const clear = firstClear(
+        { width: labelWidth(v.code), height: LABEL_HEIGHT },
+        candidatesFor(v),
+        [...otherBuses(v), ...pinBoxes, ...placedLabels].map(relativeTo(origin)),
+        LABEL_GAP,
       );
-      result.set(selected.id, { labelled: true, placement });
-      const origin = screen.get(selected.id);
-      if (origin) selectedBox = { ...size, x: origin.x + placement.x, y: origin.y + placement.y };
+      if (!clear) {
+        allFit = false;
+        break;
+      }
+      allLabels.set(v.id, clear);
+      placedLabels.push(labelBox(v, clear));
     }
 
-    // Hover labels for everything else, avoiding other minibuses and the selected pill.
-    for (const vehicle of vehicles) {
-      if (vehicle.id === selected?.id) continue;
-      const size = { width: hoverLabelWidth(vehicle.code), height: HOVER_LABEL_HEIGHT };
-      const candidates = placementsAround(COMPACT_SIZE / 2, size, LABEL_GAP);
-      const obstacles = obstaclesAround(vehicle, selectedBox ? [selectedBox] : []);
-      result.set(vehicle.id, {
-        labelled: false,
-        placement: roundPlacement(
-          placeLabel(size, candidates, obstacles, LABEL_GAP, poiObstaclesAround(vehicle)),
-        ),
-      });
+    const selected = vehicles.find((v) => v.code === selectedCode);
+    let selectedLabel: Box | null = null;
+    // Hover/selected labels avoid other buses first, then pins; selected is placed first.
+    const ordered = selected ? [selected, ...vehicles.filter((v) => v !== selected)] : vehicles;
+    for (const v of ordered) {
+      if (allFit && allLabels.has(v.id)) {
+        result.set(v.id, { labelled: true, placement: roundPlacement(allLabels.get(v.id)!) });
+        continue;
+      }
+      const origin = busBoxes.get(v.id);
+      if (!origin) {
+        result.set(v.id, { labelled: v === selected, placement: roundPlacement(fallback(v)) });
+        continue;
+      }
+      const hard = [...otherBuses(v), ...(selectedLabel && v !== selected ? [selectedLabel] : [])];
+      const placement = placeLabel(
+        { width: labelWidth(v.code), height: LABEL_HEIGHT },
+        candidatesFor(v),
+        hard.map(relativeTo(origin)),
+        LABEL_GAP,
+        pinBoxes.map(relativeTo(origin)),
+      );
+      if (v === selected) selectedLabel = labelBox(v, placement);
+      result.set(v.id, { labelled: v === selected, placement: roundPlacement(placement) });
     }
-    return result;
+    return { result, scale };
   }, [map, vehicles, selectedCode, viewVersion]);
 
   return vehicles.map((vehicle) => {
-    const { labelled, placement } = layout.get(vehicle.id) ?? { labelled: false, placement: CENTRED };
+    const { labelled, placement } = layout.result.get(vehicle.id) ?? { labelled: false, placement: { x: 0, y: 0 } };
     return (
       <VehicleMarker
         key={vehicle.id}
         vehicle={vehicle}
+        scale={layout.scale}
         selected={vehicle.code === selectedCode}
         labelled={labelled}
         placement={placement}
@@ -324,32 +304,50 @@ function VehicleLayer({ vehicles, selectedCode, onSelect }: Omit<FleetMapProps, 
   });
 }
 
+function PlacePin({ place, selected, onSelect }: { place: Place; selected: boolean; onSelect: (id: PlaceId) => void }) {
+  const icon = useMemo(() => pinIcon(place, selected), [place, selected]);
+  return (
+    <Marker
+      position={[place.lat, place.lng]}
+      icon={icon}
+      title={place.name}
+      alt={place.name}
+      zIndexOffset={selected ? 900 : -500}
+      eventHandlers={{ click: () => onSelect(place.id) }}
+    />
+  );
+}
+
 function boundsFor(vehicles: Vehicle[]): L.LatLngBounds {
   const points: L.LatLngTuple[] = vehicles.length
     ? vehicles.map((v) => [v.lat, v.lng])
-    : POINTS_OF_INTEREST.map((p) => [p.lat, p.lng]);
+    : PLACES.map((p) => [p.lat, p.lng]);
   return L.latLngBounds(points);
 }
 
-/** Fits the fleet once, follows the selected minibus, and reacts to container resizes. */
-function MapBehaviour({ vehicles, selectedCode }: Pick<FleetMapProps, "vehicles" | "selectedCode">) {
+/** Fits the fleet once, follows the selected minibus or place, and reacts to container resizes. */
+function MapBehaviour({
+  vehicles,
+  selectedCode,
+  selectedPlaceId,
+}: Pick<FleetMapProps, "vehicles" | "selectedCode" | "selectedPlaceId">) {
   const map = useMap();
   const hasFitted = useRef(false);
 
   useEffect(() => {
     if (hasFitted.current || vehicles.length === 0) return;
     hasFitted.current = true;
-    const poiBounds = L.latLngBounds(POINTS_OF_INTEREST.map((p) => [p.lat, p.lng]));
-    map.fitBounds(boundsFor(vehicles).extend(poiBounds), { padding: FIT_PADDING });
+    const placeBounds = L.latLngBounds(PLACES.map((p) => [p.lat, p.lng]));
+    map.fitBounds(boundsFor(vehicles).extend(placeBounds), { padding: FIT_PADDING });
   }, [map, vehicles]);
 
-  const selected = vehicles.find((v) => v.code === selectedCode);
+  const selected = vehicles.find((v) => v.code === selectedCode) ?? PLACES.find((p) => p.id === selectedPlaceId);
   useEffect(() => {
     if (!selected) return;
     const position = L.latLng(selected.lat, selected.lng);
     if (!map.getBounds().pad(-0.15).contains(position)) map.panTo(position);
     // Pan when the selection changes or the selected minibus moves.
-  }, [map, selected?.code, selected?.lat, selected?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [map, selectedCode, selectedPlaceId, selected?.lat, selected?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const observer = new ResizeObserver(() => map.invalidateSize());
@@ -360,9 +358,15 @@ function MapBehaviour({ vehicles, selectedCode }: Pick<FleetMapProps, "vehicles"
   return null;
 }
 
-export default function FleetMap({ vehicles, selectedCode, onSelect, mode }: FleetMapProps) {
+export default function FleetMap({
+  vehicles,
+  selectedCode,
+  onSelect,
+  selectedPlaceId,
+  onSelectPlace,
+  mode,
+}: FleetMapProps) {
   const [map, setMap] = useState<L.Map | null>(null);
-  const poiIcons = useMemo(() => POINTS_OF_INTEREST.map((poi) => ({ ...poi, icon: poiIcon(poi.name) })), []);
 
   return (
     <div className={styles.wrapper}>
@@ -375,18 +379,16 @@ export default function FleetMap({ vehicles, selectedCode, onSelect, mode }: Fle
         attributionControl={false}
       >
         <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={19} />
-        {poiIcons.map((poi) => (
-          <Marker
-            key={poi.name}
-            position={[poi.lat, poi.lng]}
-            icon={poi.icon}
-            interactive={false}
-            keyboard={false}
-            zIndexOffset={-1000}
+        {PLACES.map((place) => (
+          <PlacePin
+            key={place.id}
+            place={place}
+            selected={place.id === selectedPlaceId}
+            onSelect={onSelectPlace}
           />
         ))}
         <VehicleLayer vehicles={vehicles} selectedCode={selectedCode} onSelect={onSelect} />
-        <MapBehaviour vehicles={vehicles} selectedCode={selectedCode} />
+        <MapBehaviour vehicles={vehicles} selectedCode={selectedCode} selectedPlaceId={selectedPlaceId} />
       </MapContainer>
 
       <div className={styles.north} aria-hidden="true">

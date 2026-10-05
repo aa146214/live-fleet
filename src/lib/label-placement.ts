@@ -23,14 +23,21 @@ function intersects(a: Box, b: Box, gap: number): boolean {
 }
 
 /**
- * Positions around a marker of radius `anchorHalf` for a label of `size`:
- * above, below, then above/below shifted to either side, then right and left.
+ * Positions around a marker for a label of `size`: above, below, then above/below
+ * shifted to either side, then right and left. `anchor` is the marker's half-size,
+ * either one number (square) or separate half-width and half-height.
  */
-export function placementsAround(anchorHalf: number, size: Size, gap: number): Placement[] {
-  const above = -(anchorHalf + gap + size.height / 2);
-  const below = anchorHalf + gap + size.height / 2;
-  const shift = Math.max(0, size.width / 2 - anchorHalf);
-  const side = anchorHalf + gap + size.width / 2;
+export function placementsAround(
+  anchor: number | { halfWidth: number; halfHeight: number },
+  size: Size,
+  gap: number,
+): Placement[] {
+  const { halfWidth, halfHeight } =
+    typeof anchor === "number" ? { halfWidth: anchor, halfHeight: anchor } : anchor;
+  const above = -(halfHeight + gap + size.height / 2);
+  const below = halfHeight + gap + size.height / 2;
+  const shift = Math.max(0, size.width / 2 - halfWidth);
+  const side = halfWidth + gap + size.width / 2;
   return [
     { x: 0, y: above },
     { x: 0, y: below },
@@ -41,6 +48,20 @@ export function placementsAround(anchorHalf: number, size: Size, gap: number): P
     { x: side, y: 0 },
     { x: -side, y: 0 },
   ];
+}
+
+/** The first candidate touching none of the obstacles, or null if there is none. */
+export function firstClear(
+  size: Size,
+  candidates: Placement[],
+  obstacles: Box[],
+  gap: number,
+): Placement | null {
+  return (
+    candidates.find((candidate) =>
+      obstacles.every((box) => !intersects({ ...candidate, ...size }, box, gap)),
+    ) ?? null
+  );
 }
 
 /**

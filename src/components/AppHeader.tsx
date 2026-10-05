@@ -1,42 +1,23 @@
 "use client";
 
-import Link from "next/link";
+import Image from "next/image";
 import { ROUTES } from "@/lib/routes";
 import type { RouteId } from "@/lib/types";
 import styles from "./AppHeader.module.css";
 
 interface AppHeaderProps {
-  title: string;
-  status: string;
   /** Minibuses assigned to each route; null while the first data is loading. */
   routeCounts: ReadonlyMap<RouteId, number> | null;
   activeRoutes: ReadonlySet<RouteId>;
   onToggleRoute: (id: RouteId) => void;
-  page: "map" | "stops";
 }
 
-export function AppHeader({
-  title,
-  status,
-  routeCounts,
-  activeRoutes,
-  onToggleRoute,
-  page,
-}: AppHeaderProps) {
+export function AppHeader({ routeCounts, activeRoutes, onToggleRoute }: AppHeaderProps) {
   return (
     <header className={styles.header}>
       <div className={styles.brand}>
-        <span className={styles.wordmark} aria-hidden="true">
-          WB
-        </span>
-        <span className={styles.brandName}>Leavesden Shuttle</span>
-      </div>
-
-      <div className={styles.titleRow}>
-        <h1 className={styles.title}>{title}</h1>
-        <p className={styles.status} role="status">
-          {status}
-        </p>
+        <Image src="/brand/wb-logo.svg" alt="Warner Bros." width={46} height={47} priority />
+        <h1 className={styles.title}>Leavesden Shuttle Live Map</h1>
       </div>
 
       <div className={styles.filters} role="group" aria-label="Show routes">
@@ -59,16 +40,6 @@ export function AppHeader({
           );
         })}
       </div>
-
-      {page === "map" ? (
-        <Link href="/stops" className={styles.stopsLink}>
-          Stops
-        </Link>
-      ) : (
-        <span className={styles.stopsLink} aria-current="page">
-          Stops
-        </span>
-      )}
     </header>
   );
 }

@@ -1,4 +1,4 @@
-/* Mobile header (Figma "Mobile header", 390 wide) */
+/* Mobile header (Figma "Mobile header", 390 x 134) */
 .header {
   display: flex;
   flex-direction: column;
@@ -14,56 +14,40 @@
   gap: 10px;
 }
 
-.wordmark {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 38px;
-  border: 2px solid var(--color-white);
-  border-radius: 10px;
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.brandName {
+.title {
   font-size: 16px;
   font-weight: 700;
-}
-
-.titleRow {
-  display: flex;
-  align-items: center;
-  gap: 50px;
   white-space: nowrap;
-}
-
-.title {
-  font-size: 28px;
-  font-weight: 700;
-}
-
-.status {
-  font-size: 11px;
 }
 
 .filters {
   display: flex;
-  flex-wrap: wrap;
   gap: 6px;
 }
 
 .filter {
   display: inline-flex;
+  flex: 1 0 0;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 9px;
+  min-width: 0;
+  padding: 8px 16px;
   border: 1px solid var(--route);
-  border-radius: 24px;
+  border-radius: 16px;
   background: var(--route);
   color: var(--color-white);
-  font-size: 11px;
+  font-size: 10.8px;
+  line-height: 1.4;
   white-space: nowrap;
-  transition: background-color 120ms ease, opacity 120ms ease;
+  transition:
+    background-color 120ms ease,
+    opacity 120ms ease;
+}
+
+/* "Rickmansworth" keeps its natural width; the other two share the rest. */
+.filter:last-child {
+  flex: 0 0 auto;
 }
 
 .filterNumber {
@@ -76,68 +60,22 @@
   opacity: 0.75;
 }
 
-.stopsLink {
-  display: none;
-}
-
 /* Desktop header (Figma "Desktop header", 1440 x 102) */
 @media (min-width: 900px) {
   .header {
     flex-direction: row;
     align-items: center;
-    gap: 28px;
+    justify-content: space-between;
     height: 102px;
     padding: 28px;
   }
 
-  .brand {
-    gap: 28px;
-  }
-
-  .wordmark {
-    width: 38px;
-    height: 42px;
-    font-size: 17px;
-  }
-
-  .brandName {
-    font-size: 18px;
-    white-space: nowrap;
-  }
-
-  .titleRow {
-    gap: 28px;
-  }
-
-  .title {
-    font-size: 24px;
-  }
-
-  .status {
-    font-size: 12px;
-  }
-
   .filters {
-    flex-wrap: nowrap;
-    gap: 28px;
-    margin-left: auto;
+    flex: 0 0 auto;
   }
 
-  .filter {
-    gap: 7px;
-    padding: 10px;
-    font-size: 12px;
-  }
-
-  .stopsLink {
-    display: inline-block;
-    padding: 10px;
-    border: 1px solid var(--color-white);
-    border-radius: 10px;
-    font-size: 13px;
-  }
-
-  a.stopsLink:hover {
-    background: rgb(255 255 255 / 0.1);
+  .filter,
+  .filter:last-child {
+    flex: 0 0 auto;
   }
 }

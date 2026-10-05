@@ -7,6 +7,14 @@
       "runtimeArgs": ["run", "dev"],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "leavesden-shuttle-demo",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "env": { "FLEET_DEMO": "1" },
+      "port": 3000,
+      "autoPort": true
     }
   ]
 }

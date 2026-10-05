@@ -1,23 +1,21 @@
-/* Mobile: header, map, guidance or details sheet, bottom navigation */
+/* Mobile (Figma "Mobile / Map overview" and "Mobile / Minibus W1"): header, then the
+   map filling whatever the guidance or details sheet below it leaves. */
 .screen {
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
+  height: 100dvh;
 }
 
 .main {
   display: flex;
   flex: 1;
   flex-direction: column;
+  min-height: 0;
 }
 
 .mapArea {
-  height: max(360px, calc(100dvh - 178px - 69px - 66px - 25px));
-  transition: height 200ms ease;
-}
-
-.hasSelection .mapArea {
-  height: 280px;
+  flex: 1;
+  min-height: 240px;
 }
 
 .mapPlaceholder {
@@ -49,11 +47,12 @@
 }
 
 .hasSelection .panel {
+  max-height: 60dvh;
   padding: 0 20px;
+  overflow-y: auto;
 }
 
-.listSection,
-.chooseHint {
+.listSection {
   display: none;
 }
 
@@ -87,10 +86,7 @@
     min-height: 0;
   }
 
-  .mapArea,
-  .hasSelection .mapArea {
-    flex: 1;
-    height: auto;
+  .mapArea {
     min-width: 0;
   }
 
@@ -99,6 +95,7 @@
     flex-shrink: 0;
     gap: 20px;
     width: 360px;
+    max-height: none;
     padding: 24px;
     overflow-y: auto;
   }
@@ -107,6 +104,12 @@
     display: flex;
     flex-direction: column;
     gap: 20px;
+  }
+
+  /* Divider between the list and the details card (Figma "Vehicle list" border). */
+  .withDetails {
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--color-border);
   }
 
   .panelTitle {
@@ -185,12 +188,6 @@
   }
 
   .empty {
-    color: var(--color-muted);
-    font-size: 13px;
-  }
-
-  .chooseHint {
-    display: block;
     color: var(--color-muted);
     font-size: 13px;
   }
