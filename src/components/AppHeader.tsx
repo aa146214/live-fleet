@@ -8,12 +8,21 @@ import styles from "./AppHeader.module.css";
 interface AppHeaderProps {
   title: string;
   status: string;
+  /** Minibuses assigned to each route; null while the first data is loading. */
+  routeCounts: ReadonlyMap<RouteId, number> | null;
   activeRoutes: ReadonlySet<RouteId>;
   onToggleRoute: (id: RouteId) => void;
   page: "map" | "stops";
 }
 
-export function AppHeader({ title, status, activeRoutes, onToggleRoute, page }: AppHeaderProps) {
+export function AppHeader({
+  title,
+  status,
+  routeCounts,
+  activeRoutes,
+  onToggleRoute,
+  page,
+}: AppHeaderProps) {
   return (
     <header className={styles.header}>
       <div className={styles.brand}>
@@ -33,6 +42,7 @@ export function AppHeader({ title, status, activeRoutes, onToggleRoute, page }: 
       <div className={styles.filters} role="group" aria-label="Show routes">
         {ROUTES.map((route) => {
           const active = activeRoutes.has(route.id);
+          const count = routeCounts?.get(route.id);
           return (
             <button
               key={route.id}
@@ -40,9 +50,10 @@ export function AppHeader({ title, status, activeRoutes, onToggleRoute, page }: 
               className={`${styles.filter} ${active ? "" : styles.filterOff}`}
               style={{ "--route": route.color } as React.CSSProperties}
               aria-pressed={active}
+              aria-label={`${route.name}: ${count ?? "loading"} minibus${count === 1 ? "" : "es"}`}
               onClick={() => onToggleRoute(route.id)}
             >
-              <span className={styles.filterNumber}>{route.id}</span>
+              <span className={styles.filterNumber}>{count ?? "–"}</span>
               <span>{route.name}</span>
             </button>
           );

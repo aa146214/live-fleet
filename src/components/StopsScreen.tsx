@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { liveStatusText } from "@/lib/format";
-import { ENTRANCES, ROUTES, routeSequence } from "@/lib/routes";
+import { countByRoute, ENTRANCES, ROUTES, routeSequence } from "@/lib/routes";
 import { useFleet } from "@/lib/use-fleet";
 import { useRouteFilter } from "@/lib/use-route-filter";
 import { AppHeader } from "./AppHeader";
@@ -32,6 +32,7 @@ export function StopsScreen() {
       <AppHeader
         title="Stops"
         status={liveStatusText(snapshot)}
+        routeCounts={snapshot ? countByRoute(snapshot.vehicles) : null}
         activeRoutes={activeRoutes}
         onToggleRoute={toggleRoute}
         page="stops"

@@ -1,4 +1,4 @@
-import type { RouteId } from "./types";
+import type { RouteId, Vehicle } from "./types";
 
 export interface LatLng {
   lat: number;
@@ -70,6 +70,15 @@ export function getRoute(id: RouteId | null): ShuttleRoute | undefined {
 
 export function routeSequence(route: ShuttleRoute): string {
   return `${route.terminus} → Gate B → Gate A → ${route.terminus}`;
+}
+
+/** How many of the given minibuses are assigned to each route (unassigned ones aren't counted). */
+export function countByRoute(vehicles: Vehicle[]): Map<RouteId, number> {
+  const counts = new Map<RouteId, number>(ROUTES.map((route) => [route.id, 0]));
+  for (const vehicle of vehicles) {
+    if (vehicle.routeId !== null) counts.set(vehicle.routeId, (counts.get(vehicle.routeId) ?? 0) + 1);
+  }
+  return counts;
 }
 
 export function routeColor(id: RouteId | null): string {

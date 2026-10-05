@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { liveStatusText } from "@/lib/format";
+import { countByRoute } from "@/lib/routes";
 import { useFleet } from "@/lib/use-fleet";
 import { useRouteFilter } from "@/lib/use-route-filter";
 import { AppHeader } from "./AppHeader";
@@ -39,6 +40,8 @@ export function LiveMapScreen() {
     [snapshot, activeRoutes],
   );
   const selected = visibleVehicles.find((vehicle) => vehicle.code === selectedParam) ?? null;
+  // Counted over all vehicles, so turning a route filter off doesn't change its number.
+  const routeCounts = useMemo(() => (snapshot ? countByRoute(snapshot.vehicles) : null), [snapshot]);
 
   const [expanded, setExpanded] = useState(false);
   const firstVehicles = visibleVehicles.slice(0, LIST_LIMIT);
@@ -95,6 +98,7 @@ export function LiveMapScreen() {
       <AppHeader
         title="Live map"
         status={liveStatusText(snapshot)}
+        routeCounts={routeCounts}
         activeRoutes={activeRoutes}
         onToggleRoute={toggleRoute}
         page="map"
