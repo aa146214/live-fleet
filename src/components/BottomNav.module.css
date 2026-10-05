@@ -1,0 +1,38 @@
+.nav {
+  position: sticky;
+  bottom: 0;
+  z-index: 1100;
+  display: flex;
+  background: var(--color-white);
+  border-top: 1px solid var(--color-border);
+}
+
+.item {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px;
+  color: var(--color-muted);
+}
+
+.active {
+  color: var(--color-blue);
+}
+
+.icon {
+  font-size: 19px;
+  line-height: 1.4;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (min-width: 900px) {
+  .nav {
+    display: none;
+  }
+}

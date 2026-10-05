@@ -1,0 +1,116 @@
+/* Figma "Shuttle stops" (mobile 390 / desktop 1440) */
+.screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+}
+
+.heading {
+  color: var(--color-navy);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.intro {
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.stops {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  list-style: none;
+}
+
+.stop {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 7px 0;
+}
+
+.name {
+  color: var(--color-ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.detail {
+  align-self: flex-start;
+  color: var(--color-navy);
+  font-size: 12px;
+}
+
+a.detail:hover {
+  text-decoration: underline;
+}
+
+.sequence {
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+.note {
+  color: var(--color-muted);
+  font-size: 10px;
+}
+
+.back {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .content {
+    gap: 20px;
+    padding: 48px;
+  }
+
+  .heading {
+    font-size: 30px;
+  }
+
+  .stops {
+    gap: 20px;
+  }
+
+  .stop {
+    padding: 14px 0;
+  }
+
+  .name {
+    font-size: 18px;
+  }
+
+  .detail {
+    font-size: 14px;
+  }
+
+  .sequence {
+    font-size: 13px;
+  }
+
+  .back {
+    display: inline-block;
+    align-self: flex-start;
+    width: 160px;
+    padding: 12px;
+    border-radius: 10px;
+    background: var(--color-paleblue);
+    color: var(--color-blue);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .back:hover {
+    background: var(--color-border);
+  }
+}

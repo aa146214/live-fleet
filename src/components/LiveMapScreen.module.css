@@ -1,0 +1,223 @@
+/* Mobile: header, map, guidance or details sheet, bottom navigation */
+.screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+
+.mapArea {
+  height: max(360px, calc(100dvh - 178px - 69px - 66px - 25px));
+  transition: height 200ms ease;
+}
+
+.hasSelection .mapArea {
+  height: 280px;
+}
+
+.mapPlaceholder {
+  width: 100%;
+  height: 100%;
+  background: var(--color-map);
+}
+
+.error,
+.notice {
+  padding: 8px 20px;
+  font-size: 12px;
+}
+
+.error {
+  background: #fff4e5;
+  color: #7a4100;
+}
+
+.notice {
+  background: var(--color-paleblue);
+  color: var(--color-navy);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-white);
+}
+
+.hasSelection .panel {
+  padding: 0 20px;
+}
+
+.listSection,
+.chooseHint {
+  display: none;
+}
+
+.guidance {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+}
+
+.guidanceTitle {
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.guidanceText {
+  color: var(--color-muted);
+  font-size: 11px;
+}
+
+/* Desktop: map beside a 360px vehicle sidebar */
+@media (min-width: 900px) {
+  .screen {
+    height: 100dvh;
+    min-height: 600px;
+  }
+
+  .main {
+    flex-direction: row;
+    min-height: 0;
+  }
+
+  .mapArea,
+  .hasSelection .mapArea {
+    flex: 1;
+    height: auto;
+    min-width: 0;
+  }
+
+  .panel,
+  .hasSelection .panel {
+    flex-shrink: 0;
+    gap: 20px;
+    width: 360px;
+    padding: 24px;
+    overflow-y: auto;
+  }
+
+  .listSection {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .panelTitle {
+    color: var(--color-ink);
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .panelHint {
+    color: var(--color-muted);
+    font-size: 11px;
+  }
+
+  .list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .rows {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    list-style: none;
+  }
+
+  /* A minibus picked on the map that is beyond the short list slides in under it. */
+  .pinned {
+    margin-top: 5px;
+    animation: row-in 240ms ease-out;
+  }
+
+  /* Rows past the first six: a 0fr → 1fr grid row animates the height open and closed. */
+  .more {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition:
+      grid-template-rows 280ms ease,
+      margin-top 280ms ease;
+  }
+
+  .moreOpen {
+    grid-template-rows: 1fr;
+    margin-top: 5px;
+  }
+
+  .more > .rows {
+    min-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+
+  .moreOpen > .rows {
+    opacity: 1;
+  }
+
+  /* Keep focus rings inside the clipped area. */
+  .more .rows :focus-visible {
+    outline-offset: -3px;
+  }
+
+  .showMore {
+    align-self: stretch;
+    margin-top: -12px;
+    padding: 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    color: var(--color-blue);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .showMore:hover {
+    border-color: var(--color-blue);
+    background: var(--color-paleblue);
+  }
+
+  .empty {
+    color: var(--color-muted);
+    font-size: 13px;
+  }
+
+  .chooseHint {
+    display: block;
+    color: var(--color-muted);
+    font-size: 13px;
+  }
+
+  .guidance {
+    display: none;
+  }
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pinned {
+    animation: none;
+  }
+
+  .more,
+  .more > .rows {
+    transition: none;
+  }
+}

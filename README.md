@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Leavesden Shuttle
 
-## Getting Started
+Live map of the Warner Bros. Studios Leavesden shuttle minibuses, built from the
+"Warner Bros_Leavesden Shuttle" Figma file (mobile and desktop) and fed by the
+[FleetSmart API](https://apiguide.fleetsmartlive.com/).
 
-First, run the development server:
+## Run it
 
 ```bash
+npm install
+cp .env.example .env.local   # then add FLEETSMART_API_KEY
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Without an API key the app shows the six illustrative minibuses from the design.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## How it works
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `src/app/api/vehicles/route.ts` calls FleetSmart `GET /live_views?include=vehicle,vehicle_location`
+  on the server, so the API key never reaches the browser. Responses are cached for 10 seconds
+  and concurrent requests are shared, keeping within FleetSmart's one-request-per-second limit.
+- The browser polls `/api/vehicles` every 15 seconds while the tab is visible.
+- The map uses Leaflet with OpenStreetMap tiles. Markers, rows, details cards and route filters
+  follow the Figma components; arrows show the direction of travel for moving vehicles.
+- Selecting a minibus updates the URL (`/?vehicle=W1`), so a specific minibus can be linked.
 
-## Learn More
+## Configure the shuttles
 
-To learn more about Next.js, take a look at the following resources:
+The FleetSmart account contains the whole fleet, so list the shuttle registrations in
+`src/config/vehicle-assignments.ts`:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```ts
+export const VEHICLE_ASSIGNMENTS = {
+  "AB12 CDE": { code: "W1", routeId: 1 }, // 1 Watford, 2 St Albans, 3 Rickmansworth
+};
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Until that list has entries, every minibus within 20 km of the studio is shown, labelled by
+registration.
 
-## Deploy on Vercel
+FleetSmart has no timetable data, so "Next destination" is estimated from the direction of
+travel (towards the studio or towards the route's station).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Before going live
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Gate A/B and entrance locations still need confirming (`src/lib/routes.ts`).
+- The public OpenStreetMap tile server is for light use only; switch to a tile provider for
+  production traffic.

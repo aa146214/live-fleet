@@ -1,0 +1,286 @@
+.wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-map);
+}
+
+.map {
+  width: 100%;
+  height: 100%;
+  background: var(--color-map);
+  font-family: inherit;
+}
+
+/* Vehicle marker (Figma "Vehicle marker", 60 x 44) */
+.vehicleIcon {
+  background: none;
+  border: none;
+}
+
+/* Holds the marker, halo and arrow so they shift together when spread out. */
+.marker {
+  position: absolute;
+  inset: 0;
+}
+
+.vehicle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 60px;
+  height: 44px;
+  padding: 4px;
+  border: 2px solid var(--color-white);
+  border-radius: 14px;
+  background: var(--route);
+  color: var(--color-white);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.vehicleIcon:focus-visible {
+  outline: none;
+}
+
+.vehicleIcon:focus-visible .vehicle {
+  outline: 3px solid var(--color-blue);
+  outline-offset: 3px;
+}
+
+.halo {
+  position: absolute;
+  inset: -8px;
+  border: 2px solid var(--color-blue);
+  border-radius: 22px;
+  background: var(--color-paleblue);
+}
+
+/* Compact overview marker (and callout anchor): heading arrow, or a dot when stopped */
+.compact .marker,
+.calloutIcon .marker {
+  display: grid;
+  place-items: center;
+}
+
+/* Selected pill drawn beside its dot/arrow when centring it would cover another minibus.
+   --lx/--ly hold the pill centre's offset from the vehicle position. */
+.callout {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) translate(var(--lx), var(--ly));
+}
+
+.calloutPill {
+  position: relative;
+  display: block;
+  height: 44px;
+}
+
+.heading {
+  filter: drop-shadow(0 1px 1.5px rgb(16 20 38 / 0.45));
+  cursor: pointer;
+  transition: scale 150ms ease;
+}
+
+.dot {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-white);
+  border-radius: 50%;
+  background: var(--route);
+  box-shadow: 0 1px 2px rgb(16 20 38 / 0.4);
+  cursor: pointer;
+  transition: scale 150ms ease;
+}
+
+/* `scale` composes with the inline rotate() on the arrow instead of replacing it. */
+.compact:hover .dot,
+.compact:hover .heading,
+.compact:focus-visible .dot,
+.compact:focus-visible .heading {
+  scale: 1.25;
+}
+
+/* --lx/--ly hold the label centre's offset from the vehicle, chosen to avoid other minibuses. */
+.hoverLabel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: inline-flex;
+  visibility: hidden;
+  opacity: 0;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 6px;
+  border: 2px solid var(--color-white);
+  border-radius: 10px;
+  background: var(--route);
+  color: var(--color-white);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  transform: translate(-50%, -50%) translate(var(--lx), var(--ly)) scale(0.92);
+  pointer-events: none;
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease,
+    visibility 0s linear 150ms;
+}
+
+.compact:hover .hoverLabel,
+.compact:focus-visible .hoverLabel {
+  visibility: visible;
+  opacity: 1;
+  transform: translate(-50%, -50%) translate(var(--lx), var(--ly)) scale(1);
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease,
+    visibility 0s;
+}
+
+/* A newly selected minibus grows from its dot or arrow into the labelled marker. */
+.popIn {
+  animation: pop-in 220ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heading,
+  .dot,
+  .hoverLabel,
+  .compact:hover .hoverLabel,
+  .compact:focus-visible .hoverLabel {
+    transition: none;
+  }
+
+  .popIn {
+    animation: none;
+  }
+}
+
+.compact:focus-visible .dot,
+.compact:focus-visible .heading {
+  outline: 3px solid var(--color-blue);
+  outline-offset: 2px;
+  border-radius: 50%;
+}
+
+/* Direction-of-travel arrow orbits the marker at the vehicle's heading. */
+.arrow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(var(--heading)) translateY(calc(-1 * var(--orbit)));
+  pointer-events: none;
+}
+
+/* Point-of-interest label (Figma "Point of interest") */
+.poiIcon {
+  background: none;
+  border: none;
+}
+
+.poi {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--color-white);
+  color: var(--color-navy);
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: nowrap;
+  transform: translate(-11px, -50%);
+}
+
+.poi span {
+  font-size: 9px;
+}
+
+.north {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 36px;
+  padding: 7px;
+  border-radius: 18px;
+  background: var(--color-white);
+  color: var(--color-navy);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.north span:first-child {
+  font-size: 11px;
+}
+
+.controls {
+  position: absolute;
+  right: 14px;
+  bottom: 32px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
+  background: var(--color-white);
+  color: var(--color-navy);
+  font-size: 23px;
+  line-height: 1;
+  box-shadow: 0 1px 3px rgb(16 20 38 / 0.15);
+}
+
+.control:hover {
+  background: var(--color-paleblue);
+}
+
+.attribution {
+  position: absolute;
+  bottom: 0;
+  left: 8px;
+  z-index: 1000;
+  padding: 4px;
+  background: rgb(255 255 255 / 0.92);
+  color: var(--color-muted);
+  font-size: 8px;
+}
+
+.attribution a {
+  text-decoration: underline;
+}
+
+@media (min-width: 900px) {
+  .attribution {
+    font-size: 10px;
+  }
+}
