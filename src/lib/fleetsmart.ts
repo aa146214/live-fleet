@@ -107,10 +107,8 @@ function toVehicles(documents: JsonApiDocument[]): Vehicle[] {
     const code = assignment?.code ?? normaliseVrn(registration);
     const routeId = assignment?.routeId ?? null;
     const status = toStatus(asString(liveView.attributes.status));
-    // Moving: the heading is the direction of travel. Parked: FleetSmart keeps the last
-    // heading for some vehicles but reports 0 for most, so treat a parked 0 as unknown.
-    const reported = asNumber(location?.attributes.heading);
-    const heading = status === "moving" || reported !== 0 ? reported : null;
+    // FleetSmart reports heading 0 for parked vehicles, so only trust it while moving.
+    const heading = status === "moving" ? asNumber(location?.attributes.heading) : null;
     const address = [asString(location?.attributes.address), asString(location?.attributes.postcode)]
       .filter(Boolean)
       .join(", ");
