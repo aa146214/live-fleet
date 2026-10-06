@@ -159,9 +159,6 @@ export async function getLiveSnapshot(): Promise<FleetSnapshot> {
   inFlight = fetchLiveVehicles()
     .then((vehicles) => {
       const snapshot: FleetSnapshot = { mode: "live", vehicles, fetchedAt: new Date().toISOString() };
-      if (ASSIGNMENTS_BY_VRN.size === 0) {
-        snapshot.notice = `Shuttles not configured yet: showing every minibus within ${SHUTTLE_SEARCH_RADIUS_KM} km of the studio. Add the shuttle registrations in src/config/vehicle-assignments.ts.`;
-      }
       cached = { at: Date.now(), snapshot };
       return snapshot;
     })

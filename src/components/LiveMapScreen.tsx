@@ -94,8 +94,6 @@ export function LiveMapScreen() {
     <div className={`${styles.screen} ${hasDetails ? styles.hasSelection : ""}`}>
       <AppHeader routeCounts={routeCounts} />
 
-      {snapshot?.notice && !error && <p className={styles.notice}>{snapshot.notice}</p>}
-
       {error && (
         <p className={styles.error} role="alert">
           Live data unavailable ({error}).{" "}

@@ -23,8 +23,6 @@ export interface FleetSnapshot {
   mode: "live" | "demo";
   vehicles: Vehicle[];
   fetchedAt: string;
-  /** Informational message about what is being shown, e.g. a configuration hint. */
-  notice?: string;
   /** Set when the latest refresh failed and older data is being served. */
   error?: string;
 }

@@ -24,20 +24,11 @@
   background: var(--color-map);
 }
 
-.error,
-.notice {
-  padding: 8px 20px;
-  font-size: 12px;
-}
-
 .error {
+  padding: 8px 20px;
   background: #fff4e5;
   color: #7a4100;
-}
-
-.notice {
-  background: var(--color-paleblue);
-  color: var(--color-navy);
+  font-size: 12px;
 }
 
 .panel {
