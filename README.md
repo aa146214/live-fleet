@@ -27,6 +27,23 @@ while a key is set (e.g. for a design review), run with `FLEET_DEMO=1`.
 - Tapping the studio or a station pin shows its details (what3words, route, entrances).
 - Selections live in the URL (`/?vehicle=W1`, `/?place=station-1`), so they can be linked.
 
+## Smooth movement between reports
+
+Trackers report to FleetSmart about once a minute, so the map fills the gaps
+(`src/lib/motion.ts`):
+
+- A moving minibus is nudged forward along its reported heading and speed (mph), coasting to a
+  halt over about 15 seconds' worth of travel rather than guessing the whole minute. Without
+  route lines a longer guess would cut across corners.
+- When a new report arrives the marker glides onto it (4–30 seconds, longer for bigger gaps)
+  instead of jumping. If it has overshot a minibus that is still moving, it waits for it
+  rather than reversing; gaps over 1.5 km snap.
+- Below 0.5 m/s a minibus is treated as stopped. A moving minibus that hasn't reported for
+  2.5 minutes is faded.
+- Report times are the tracker's own (`date_time`). The server sends FleetSmart's current time
+  with each response so a viewer's clock being off doesn't skew the prediction.
+- Demo buses and viewers who prefer reduced motion get the plain positions.
+
 ## Configure the shuttles
 
 The FleetSmart account contains the whole fleet, so list the shuttle registrations in

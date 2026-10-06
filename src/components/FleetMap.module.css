@@ -43,6 +43,11 @@
   display: block;
 }
 
+/* A moving minibus whose reports have stopped arriving: faded until it reports again. */
+.stale .bus {
+  opacity: 0.35;
+}
+
 .vehicleIcon:hover .bus,
 .vehicleIcon:focus-visible .bus {
   opacity: 1;

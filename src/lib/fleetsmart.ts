@@ -50,7 +50,21 @@ async function fetchPage(page: number): Promise<JsonApiDocument> {
   if (!response.ok) {
     throw new Error(`FleetSmart responded ${response.status} ${response.statusText}`);
   }
+  // The Date header is truncated to whole seconds, so assume the middle of that second.
+  const serverDate = Date.parse(response.headers.get("date") ?? "");
+  if (Number.isFinite(serverDate)) clockAheadMs = Date.now() - (serverDate + 500);
   return response.json();
+}
+
+/** How far this server's clock is ahead of FleetSmart's (to about a second). */
+let clockAheadMs = 0;
+
+/**
+ * The current time by FleetSmart's clock. Sent with each response so browsers can
+ * line report times up with their own clocks, which may be off by many seconds.
+ */
+export function fleetSmartNow(): string {
+  return new Date(Date.now() - clockAheadMs).toISOString();
 }
 
 const asString = (value: unknown) => (typeof value === "string" ? value : "");
@@ -126,8 +140,9 @@ function toVehicles(documents: JsonApiDocument[]): Vehicle[] {
       speedMph: asNumber(location?.attributes.speed),
       status,
       address: address || "Address unavailable",
+      // When the tracker took this position (the live view's updated_at is when it reached FleetSmart).
       updatedAt:
-        asString(liveView.attributes.updated_at) || asString(location?.attributes.date_time) || null,
+        asString(location?.attributes.date_time) || asString(liveView.attributes.updated_at) || null,
       nextDestination: estimateNextDestination({ lat, lng }, routeId, heading, status),
     });
   }

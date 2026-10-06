@@ -15,6 +15,7 @@ export interface Vehicle {
   speedMph: number | null;
   status: VehicleStatus;
   address: string;
+  /** When the tracker took this position. */
   updatedAt: string | null;
   nextDestination: string;
 }
@@ -23,6 +24,8 @@ export interface FleetSnapshot {
   mode: "live" | "demo";
   vehicles: Vehicle[];
   fetchedAt: string;
+  /** The time by FleetSmart's clock when this response was sent (see fleetSmartNow). */
+  serverTime?: string;
   /** Set when the latest refresh failed and older data is being served. */
   error?: string;
 }

@@ -22,7 +22,7 @@ const FleetMap = dynamic(() => import("./FleetMap"), {
 const LIST_LIMIT = 6;
 
 export function LiveMapScreen() {
-  const { snapshot, error } = useFleet();
+  const { snapshot, error, clockAheadMs } = useFleet();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -110,6 +110,7 @@ export function LiveMapScreen() {
             selectedPlaceId={selectedPlace?.id ?? null}
             onSelectPlace={selectPlace}
             mode={mode}
+            clockAheadMs={clockAheadMs}
           />
         </div>
 

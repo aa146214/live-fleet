@@ -1,7 +1,7 @@
 "use client";
 
 import L from "leaflet";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import {
   firstClear,
@@ -11,6 +11,7 @@ import {
   type Placement,
   type Size,
 } from "@/lib/label-placement";
+import { drawnPosition, isStale, startMotion, updateMotion, type Fix, type Motion } from "@/lib/motion";
 import { getRoute, PLACES, routeColor, type Place, type PlaceId } from "@/lib/routes";
 import type { FleetSnapshot, Vehicle } from "@/lib/types";
 import styles from "./FleetMap.module.css";
@@ -32,6 +33,9 @@ const LABEL_GAP = 4;
 const LABEL_HEIGHT = 26;
 const labelWidth = (code: string) => Math.round(36 + code.length * 7.5);
 
+/** How often the label layout and stale fading catch up with the moving markers. */
+const LAYOUT_INTERVAL_MS = 1000;
+
 /** Pin artwork: the tip (the real location) is near the bottom centre. */
 const PIN_GEOMETRY = {
   station: { width: 43, height: 43, tipX: 21.5, tipY: 40.4 },
@@ -45,6 +49,8 @@ export interface FleetMapProps {
   selectedPlaceId: PlaceId | null;
   onSelectPlace: (id: PlaceId) => void;
   mode: FleetSnapshot["mode"] | null;
+  /** How far this browser's clock is ahead of FleetSmart's, so report times can be compared with it. */
+  clockAheadMs: number;
 }
 
 function escapeHtml(value: string): string {
@@ -93,12 +99,18 @@ function busIcon(
   scale: number,
   selected: boolean,
   labelled: boolean,
+  stale: boolean,
   animateLabel: boolean,
   placement: Placement,
 ): L.DivIcon {
   const color = routeColor(routeId);
   const size = Math.ceil(BUS_HEIGHT * scale);
-  const classes = [styles.vehicleIcon, selected ? styles.selected : "", labelled ? styles.labelled : ""];
+  const classes = [
+    styles.vehicleIcon,
+    selected ? styles.selected : "",
+    labelled ? styles.labelled : "",
+    stale ? styles.stale : "",
+  ];
   return L.divIcon({
     className: classes.join(" "),
     iconSize: [size, size],
@@ -132,15 +144,22 @@ function VehicleMarker({
   scale,
   selected,
   labelled,
+  stale,
   placement,
+  animated,
   onSelect,
+  onMarker,
 }: {
   vehicle: Vehicle;
   scale: number;
   selected: boolean;
   labelled: boolean;
+  stale: boolean;
   placement: Placement;
+  /** The layer moves this marker itself; React only sets where it starts. */
+  animated: boolean;
   onSelect: (code: string) => void;
+  onMarker: (id: string, marker: L.Marker | null) => void;
 }) {
   const { code, routeId, heading } = vehicle;
   const { x, y } = placement;
@@ -159,15 +178,19 @@ function VehicleMarker({
   }, [animateLabel]);
 
   const icon = useMemo(
-    () => busIcon({ code, routeId, heading }, scale, selected, labelled, animateLabel, { x, y }),
-    [code, routeId, heading, scale, selected, labelled, animateLabel, x, y],
+    () => busIcon({ code, routeId, heading }, scale, selected, labelled, stale, animateLabel, { x, y }),
+    [code, routeId, heading, scale, selected, labelled, stale, animateLabel, x, y],
   );
+  const [startPosition] = useState<L.LatLngTuple>(() => [vehicle.lat, vehicle.lng]);
+  const reportedPosition = useMemo<L.LatLngTuple>(() => [vehicle.lat, vehicle.lng], [vehicle.lat, vehicle.lng]);
+  const ref = useCallback((marker: L.Marker | null) => onMarker(vehicle.id, marker), [onMarker, vehicle.id]);
   const route = getRoute(routeId);
   const label = `Minibus ${code}${route ? `, Route ${route.id} ${route.name}` : ""}`;
 
   return (
     <Marker
-      position={[vehicle.lat, vehicle.lng]}
+      ref={ref}
+      position={animated ? startPosition : reportedPosition}
       icon={icon}
       title={label}
       alt={label}
@@ -185,6 +208,90 @@ const relativeTo = (origin: { x: number; y: number }) => (box: Box): Box => ({
   y: box.y - origin.y,
 });
 
+type DrawnPositions = ReadonlyMap<string, { lat: number; lng: number; stale: boolean }>;
+const NOT_DRAWN: DrawnPositions = new Map();
+
+/** A vehicle's report, with its time moved onto this browser's clock. */
+const toFix = (v: Vehicle, clockAheadMs: number): Fix => ({
+  lat: v.lat,
+  lng: v.lng,
+  heading: v.heading,
+  speedMph: v.speedMph,
+  status: v.status,
+  at: v.updatedAt ? Date.parse(v.updatedAt) + clockAheadMs : Date.now(),
+});
+
+/**
+ * Moves the markers between FleetSmart reports (see lib/motion.ts). Positions are
+ * set on the Leaflet markers every frame, outside React; the drawn positions are
+ * shared with the label layout once a second.
+ */
+function useLiveMotion(vehicles: Vehicle[], enabled: boolean, clockAheadMs: number) {
+  const motions = useRef(new Map<string, Motion>());
+  const markers = useRef(new Map<string, L.Marker>());
+  const [drawn, setDrawn] = useState<DrawnPositions>(NOT_DRAWN);
+
+  const registerMarker = useCallback((id: string, marker: L.Marker | null) => {
+    if (marker) markers.current.set(id, marker);
+    else markers.current.delete(id);
+  }, []);
+
+  useEffect(() => {
+    const now = Date.now();
+    const next = new Map<string, Motion>();
+    for (const vehicle of vehicles) {
+      const current = motions.current.get(vehicle.id);
+      const fix = toFix(vehicle, clockAheadMs);
+      next.set(vehicle.id, current ? updateMotion(current, fix, now) : startMotion(fix));
+    }
+    motions.current = next;
+  }, [vehicles, clockAheadMs]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let frame = 0;
+    let lastShared = 0;
+    const step = () => {
+      const now = Date.now();
+      for (const [id, motion] of motions.current) {
+        const { lat, lng } = drawnPosition(motion, now);
+        markers.current.get(id)?.setLatLng([lat, lng]);
+      }
+      if (now - lastShared >= LAYOUT_INTERVAL_MS) {
+        lastShared = now;
+        setDrawn(
+          new Map(
+            [...motions.current].map(([id, motion]) => [
+              id,
+              { ...drawnPosition(motion, now), stale: isStale(motion.fix, now) },
+            ]),
+          ),
+        );
+      }
+      frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(frame);
+  }, [enabled]);
+
+  return { drawn: enabled ? drawn : NOT_DRAWN, registerMarker };
+}
+
+const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+function subscribeToReducedMotion(onChange: () => void) {
+  const query = window.matchMedia(REDUCED_MOTION);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+function usePrefersReducedMotion(): boolean {
+  return useSyncExternalStore(
+    subscribeToReducedMotion,
+    () => window.matchMedia(REDUCED_MOTION).matches,
+    () => false,
+  );
+}
+
 /**
  * Draws the buses and lays out their labels. When every bus in view can show its
  * label without touching another bus, label or pin, all labels show; otherwise
@@ -194,8 +301,12 @@ function VehicleLayer({
   vehicles,
   selectedCode,
   onSelect,
-}: Pick<FleetMapProps, "vehicles" | "selectedCode" | "onSelect">) {
+  animate,
+  clockAheadMs,
+}: Pick<FleetMapProps, "vehicles" | "selectedCode" | "onSelect" | "clockAheadMs"> & { animate: boolean }) {
   const map = useMap();
+  const { drawn, registerMarker } = useLiveMotion(vehicles, animate, clockAheadMs);
+  const positionOf = useCallback((v: Vehicle) => drawn.get(v.id) ?? v, [drawn]);
   // Bumped whenever the view changes so the label layout re-runs.
   const [viewVersion, setViewVersion] = useState(0);
   const handlers = useMemo(() => {
@@ -208,12 +319,12 @@ function VehicleLayer({
     void viewVersion;
     const scale = map.getSize().x >= 600 ? DESKTOP_BUS_SCALE : MOBILE_BUS_SCALE;
     const bounds = map.getBounds();
-    const nearby = vehicles.filter((v) => bounds.pad(0.2).contains([v.lat, v.lng]));
-    const inView = new Set(nearby.filter((v) => bounds.contains([v.lat, v.lng])).map((v) => v.id));
+    const nearby = vehicles.filter((v) => bounds.pad(0.2).contains(positionOf(v)));
+    const inView = new Set(nearby.filter((v) => bounds.contains(positionOf(v))).map((v) => v.id));
 
     const busBoxes = new Map(
       nearby.map((v) => {
-        const { x, y } = map.latLngToContainerPoint([v.lat, v.lng]);
+        const { x, y } = map.latLngToContainerPoint(positionOf(v));
         return [v.id, { x, y, ...busBox(v.heading, scale) }];
       }),
     );
@@ -287,7 +398,7 @@ function VehicleLayer({
       result.set(v.id, { labelled: v === selected, placement: roundPlacement(placement) });
     }
     return { result, scale };
-  }, [map, vehicles, selectedCode, viewVersion]);
+  }, [map, vehicles, selectedCode, viewVersion, positionOf]);
 
   return vehicles.map((vehicle) => {
     const { labelled, placement } = layout.result.get(vehicle.id) ?? { labelled: false, placement: { x: 0, y: 0 } };
@@ -298,8 +409,11 @@ function VehicleLayer({
         scale={layout.scale}
         selected={vehicle.code === selectedCode}
         labelled={labelled}
+        stale={drawn.get(vehicle.id)?.stale ?? false}
         placement={placement}
+        animated={animate}
         onSelect={onSelect}
+        onMarker={registerMarker}
       />
     );
   });
@@ -366,8 +480,12 @@ export default function FleetMap({
   selectedPlaceId,
   onSelectPlace,
   mode,
+  clockAheadMs,
 }: FleetMapProps) {
   const [map, setMap] = useState<L.Map | null>(null);
+  // Only real positions are animated; the demo buses are illustrations.
+  const reducedMotion = usePrefersReducedMotion();
+  const animate = mode === "live" && !reducedMotion;
 
   return (
     <div className={styles.wrapper}>
@@ -388,7 +506,13 @@ export default function FleetMap({
             onSelect={onSelectPlace}
           />
         ))}
-        <VehicleLayer vehicles={vehicles} selectedCode={selectedCode} onSelect={onSelect} />
+        <VehicleLayer
+          vehicles={vehicles}
+          selectedCode={selectedCode}
+          onSelect={onSelect}
+          animate={animate}
+          clockAheadMs={clockAheadMs}
+        />
         <MapBehaviour vehicles={vehicles} selectedCode={selectedCode} selectedPlaceId={selectedPlaceId} />
       </MapContainer>
 
