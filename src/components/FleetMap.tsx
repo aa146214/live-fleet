@@ -208,7 +208,7 @@ const relativeTo = (origin: { x: number; y: number }) => (box: Box): Box => ({
   y: box.y - origin.y,
 });
 
-type DrawnPositions = ReadonlyMap<string, { lat: number; lng: number; stale: boolean }>;
+type DrawnPositions = ReadonlyMap<string, { lat: number; lng: number; heading: number | null; stale: boolean }>;
 const NOT_DRAWN: DrawnPositions = new Map();
 
 /** A vehicle's report, with its time moved onto this browser's clock. */
@@ -216,10 +216,21 @@ const toFix = (v: Vehicle, clockAheadMs: number): Fix => ({
   lat: v.lat,
   lng: v.lng,
   heading: v.heading,
-  speedMph: v.speedMph,
   status: v.status,
+  report: v.updatedAt ?? "",
   at: v.updatedAt ? Date.parse(v.updatedAt) + clockAheadMs : Date.now(),
+  road: v.road,
 });
+
+/** Turns a bus marker to `heading` the short way round, from whatever angle it shows now. */
+function pointBus(marker: L.Marker | undefined, heading: number | null) {
+  const bus = marker?.getElement()?.querySelector<HTMLElement>(`.${styles.bus}`);
+  if (!bus || heading === null) return;
+  const current = Number(/rotate\(([-\d.]+)deg\)/.exec(bus.style.transform)?.[1] ?? 0);
+  const turn = ((((heading - current) % 360) + 540) % 360) - 180;
+  if (Math.abs(turn) < 0.5) return;
+  bus.style.transform = bus.style.transform.replace(/rotate\([^)]*\)/, `rotate(${(current + turn).toFixed(1)}deg)`);
+}
 
 /**
  * Moves the markers between FleetSmart reports (see lib/motion.ts). Positions are
@@ -254,8 +265,10 @@ function useLiveMotion(vehicles: Vehicle[], enabled: boolean, clockAheadMs: numb
     const step = () => {
       const now = Date.now();
       for (const [id, motion] of motions.current) {
-        const { lat, lng } = drawnPosition(motion, now);
-        markers.current.get(id)?.setLatLng([lat, lng]);
+        const { lat, lng, heading } = drawnPosition(motion, now);
+        const marker = markers.current.get(id);
+        marker?.setLatLng([lat, lng]);
+        pointBus(marker, heading);
       }
       if (now - lastShared >= LAYOUT_INTERVAL_MS) {
         lastShared = now;
@@ -325,7 +338,7 @@ function VehicleLayer({
     const busBoxes = new Map(
       nearby.map((v) => {
         const { x, y } = map.latLngToContainerPoint(positionOf(v));
-        return [v.id, { x, y, ...busBox(v.heading, scale) }];
+        return [v.id, { x, y, ...busBox(drawn.get(v.id)?.heading ?? v.heading, scale) }];
       }),
     );
     const pinBoxes: Box[] = PLACES.map((place) => {
@@ -398,7 +411,7 @@ function VehicleLayer({
       result.set(v.id, { labelled: v === selected, placement: roundPlacement(placement) });
     }
     return { result, scale };
-  }, [map, vehicles, selectedCode, viewVersion, positionOf]);
+  }, [map, vehicles, selectedCode, viewVersion, positionOf, drawn]);
 
   return vehicles.map((vehicle) => {
     const { labelled, placement } = layout.result.get(vehicle.id) ?? { labelled: false, placement: { x: 0, y: 0 } };

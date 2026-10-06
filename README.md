@@ -29,19 +29,20 @@ while a key is set (e.g. for a design review), run with `FLEET_DEMO=1`.
 
 ## Smooth movement between reports
 
-Trackers report to FleetSmart about once a minute, so the map fills the gaps
-(`src/lib/motion.ts`):
+Trackers report to FleetSmart about once a minute. Instead of jumping to each report, the map
+drives each minibus along the road it took (`src/lib/road-paths.ts`, `src/lib/motion.ts`):
 
-- A moving minibus is nudged forward along its reported heading and speed (mph), coasting to a
-  halt over about 15 seconds' worth of travel rather than guessing the whole minute. Without
-  route lines a longer guess would cut across corners.
-- When a new report arrives the marker glides onto it (4–30 seconds, longer for bigger gaps)
-  instead of jumping. If it has overshot a minibus that is still moving, it waits for it
-  rather than reversing; gaps over 1.5 km snap.
-- Below 0.5 m/s a minibus is treated as stopped. A moving minibus that hasn't reported for
-  2.5 minutes is faded.
+- When a new report arrives, the server looks up the road from the previous report with
+  Valhalla's **bus** routing, which allows bus-only roads that car routers detour around.
+  Routes longer than the minibus could have driven at its reported speeds are rejected.
+- The marker then drives from where it is to the new report along that road, taking as long as
+  the minibus did, and turns to follow it. It moves continuously and stays on the road, about
+  one report (roughly a minute) behind the minibus.
+- Nothing is guessed beyond the latest report. If no road is found (router down, odd data), that
+  stretch is a straight line; gaps over 5 minutes or 1.5 km snap.
+- A moving minibus that hasn't reported for 2.5 minutes is faded.
 - Report times are the tracker's own (`date_time`). The server sends FleetSmart's current time
-  with each response so a viewer's clock being off doesn't skew the prediction.
+  with each response so a viewer's clock being off doesn't skew the timing.
 - Demo buses and viewers who prefer reduced motion get the plain positions.
 
 ## Configure the shuttles
@@ -66,3 +67,5 @@ travel (towards the studio or towards the route's station).
 - The North/South Entrance locations still need confirming (`src/lib/routes.ts`).
 - The public OpenStreetMap tile server is for light use only; switch to a tile provider for
   production traffic.
+- The public Valhalla server (FOSSGIS) is for light, non-commercial use; point `VALHALLA_URL`
+  at a hosted or self-run Valhalla for production.

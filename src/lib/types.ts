@@ -18,6 +18,12 @@ export interface Vehicle {
   /** When the tracker took this position. */
   updatedAt: string | null;
   nextDestination: string;
+  /** The road driven since the previous report (ending here), when it could be looked up. */
+  road?: {
+    /** The previous report's time. */
+    since: string;
+    points: { lat: number; lng: number }[];
+  };
 }
 
 export interface FleetSnapshot {

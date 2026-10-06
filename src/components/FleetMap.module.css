@@ -36,7 +36,8 @@
   cursor: pointer;
   transition:
     opacity 150ms ease,
-    filter 150ms ease;
+    filter 150ms ease,
+    transform 400ms ease-out;
 }
 
 .bus svg {

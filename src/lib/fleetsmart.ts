@@ -1,5 +1,6 @@
 import { SHUTTLE_SEARCH_RADIUS_KM, VEHICLE_ASSIGNMENTS } from "@/config/vehicle-assignments";
 import { distanceMetres, estimateNextDestination } from "./destination";
+import { attachRoads } from "./road-paths";
 import { STUDIO_LOCATION } from "./routes";
 import type { FleetSnapshot, Vehicle, VehicleStatus } from "./types";
 
@@ -160,8 +161,13 @@ async function fetchLiveVehicles(): Promise<Vehicle[]> {
     documents.push(doc);
     if (doc.data.length < PAGE_SIZE) break;
   }
-  return toVehicles(documents);
+  const vehicles = toVehicles(documents);
+  await attachRoads(vehicles, ROAD_LOOKUP_WAIT_MS);
+  return vehicles;
 }
+
+/** How long a refresh waits for new road lookups before answering without them. */
+const ROAD_LOOKUP_WAIT_MS = 3000;
 
 let cached: { at: number; snapshot: FleetSnapshot } | null = null;
 let inFlight: Promise<FleetSnapshot> | null = null;
