@@ -41,11 +41,18 @@
   font-size: 10.8px;
   line-height: 1.4;
   white-space: nowrap;
+  transition: background-color 200ms ease, border-color 200ms ease;
 }
 
 /* "Rickmansworth" keeps its natural width; the other two share the rest. */
 .route:last-child {
   flex: 0 0 auto;
+}
+
+/* No minibuses on this route (or still loading): outline only. */
+.empty {
+  border-color: rgb(255 255 255 / 0.4);
+  background: transparent;
 }
 
 .routeCount {

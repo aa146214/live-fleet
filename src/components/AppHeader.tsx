@@ -16,14 +16,15 @@ export function AppHeader({ routeCounts }: AppHeaderProps) {
         <h1 className={styles.title}>Leavesden Shuttle Live Map</h1>
       </div>
 
-      {/* Route key with live minibus counts (Figma "Route filters"); not interactive. */}
+      {/* Route key with live minibus counts (Figma "Route filters"); not interactive.
+          A route is filled in its colour once it has at least one minibus. */}
       <ul className={styles.routes} aria-label="Minibuses per route">
         {ROUTES.map((route) => {
           const count = routeCounts?.get(route.id);
           return (
             <li
               key={route.id}
-              className={styles.route}
+              className={count ? styles.route : `${styles.route} ${styles.empty}`}
               style={{ "--route": route.color } as React.CSSProperties}
               aria-label={`${route.name}: ${count ?? "loading"} minibus${count === 1 ? "" : "es"}`}
             >
