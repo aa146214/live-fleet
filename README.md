@@ -27,27 +27,19 @@ while a key is set (e.g. for a design review), run with `FLEET_DEMO=1`.
 - Tapping the studio or a station pin shows its details (what3words, route, entrances).
 - Selections live in the URL (`/?vehicle=W1`, `/?place=station-1`), so they can be linked.
 
-## How shuttles and routes are found
+## Configure the shuttles
 
-FleetSmart has no idea which vehicles are shuttles or which route they run, so the app works
-it out from recent trips (`src/lib/route-detection.ts`):
-
-- About once an hour, after a request has been answered, the server reads the last 3 days of
-  GPS history for every minibus within 30 km of the studio.
-- A minibus that has arrived at one route's station at least twice, at the studio at least
-  twice, and at that station at least twice as often as any other, is a shuttle on that
-  route (1 Watford, 2 St Albans, 3 Rickmansworth). Everything else is left off the map.
-- Until the first detection finishes (or if it finds no shuttles), every minibus within 20 km
-  of the studio is shown with a notice.
-
-To force a vehicle's route, add it to `src/config/vehicle-assignments.ts`; manual entries
-override detection:
+The FleetSmart account contains the whole fleet, so list the shuttle registrations in
+`src/config/vehicle-assignments.ts`:
 
 ```ts
 export const VEHICLE_ASSIGNMENTS = {
-  "AB12 CDE": { code: "AB12CDE", routeId: 1 },
+  "AB12 CDE": { code: "W1", routeId: 1 }, // 1 Watford, 2 St Albans, 3 Rickmansworth
 };
 ```
+
+Until that list has entries, every minibus within 20 km of the studio is shown, labelled by
+registration.
 
 FleetSmart has no timetable data, so "Next destination" is estimated from the direction of
 travel (towards the studio or towards the route's station).

@@ -1,10 +1,6 @@
-import { after, connection } from "next/server";
+import { connection } from "next/server";
 import { demoSnapshot } from "@/lib/demo-fleet";
-import { getLiveSnapshot, hasFleetSmartCredentials, refreshRouteDetection } from "@/lib/fleetsmart";
-
-// Route detection reads ~3 days of trips for each nearby minibus after the response is
-// sent, paced at one FleetSmart request per second, so give it room to finish.
-export const maxDuration = 300;
+import { getLiveSnapshot, hasFleetSmartCredentials } from "@/lib/fleetsmart";
 
 export async function GET() {
   await connection();
@@ -16,8 +12,6 @@ export async function GET() {
 
   try {
     const snapshot = await getLiveSnapshot();
-    // Hourly at most; never delays this response.
-    after(refreshRouteDetection);
     return Response.json(snapshot, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const message = error instanceof Error ? error.message : "FleetSmart request failed";
