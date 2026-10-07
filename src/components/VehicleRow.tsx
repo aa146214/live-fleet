@@ -1,4 +1,5 @@
 import { getRoute, routeColor } from "@/lib/routes";
+import { useRoutes } from "@/lib/routes-context";
 import type { Vehicle } from "@/lib/types";
 import styles from "./VehicleRow.module.css";
 
@@ -9,7 +10,7 @@ interface VehicleRowProps {
 }
 
 export function VehicleRow({ vehicle, selected, onSelect }: VehicleRowProps) {
-  const route = getRoute(vehicle.routeId);
+  const route = getRoute(useRoutes(), vehicle.routeId);
   return (
     <button
       type="button"

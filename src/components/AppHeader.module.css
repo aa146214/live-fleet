@@ -26,9 +26,16 @@
   list-style: none;
 }
 
+.item {
+  display: flex;
+  flex: 1 0 0;
+}
+
 .route {
   display: inline-flex;
-  flex: 1 0 0;
+  flex: 1;
+  cursor: pointer;
+  font-family: inherit;
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -45,8 +52,13 @@
 }
 
 /* "Rickmansworth" keeps its natural width; the other two share the rest. */
-.route:last-child {
+.item:last-child {
   flex: 0 0 auto;
+}
+
+.route:focus-visible {
+  outline: 2px solid var(--color-white);
+  outline-offset: 2px;
 }
 
 /* No minibuses on this route (or still loading): outline only. */
@@ -73,8 +85,8 @@
     flex: 0 0 auto;
   }
 
-  .route,
-  .route:last-child {
+  .item,
+  .item:last-child {
     flex: 0 0 auto;
   }
 }

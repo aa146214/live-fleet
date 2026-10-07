@@ -1,5 +1,6 @@
 import Image from "next/image";
-import { ENTRANCES, getRoute, ROUTES, routeColor, routeSequence, routeSubtitle, type Place } from "@/lib/routes";
+import { ENTRANCES, getRoute, routeColor, routeSequence, routeSubtitle, type Place } from "@/lib/routes";
+import { useRoutes } from "@/lib/routes-context";
 import type { RouteId } from "@/lib/types";
 import { DetailsCard } from "./DetailsCard";
 import styles from "./DetailsCard.module.css";
@@ -25,7 +26,8 @@ interface PlaceDetailsProps {
  * a station's route and what3words address, or the studio's entrances.
  */
 export function PlaceDetails({ place, routeCounts, onClose }: PlaceDetailsProps) {
-  const route = getRoute(place.routeId);
+  const routes = useRoutes();
+  const route = getRoute(routes, place.routeId);
   const common = { id: `place-${place.id}`, title: place.name, onClose, closeLabel: "Close location details" };
 
   if (route) {
@@ -59,11 +61,11 @@ export function PlaceDetails({ place, routeCounts, onClose }: PlaceDetailsProps)
         </span>
       }
       rows={[
-        ...ENTRANCES.map(({ name, detail }): [string, React.ReactNode] => [
+        ...ENTRANCES.filter(({ name }) => name === place.entrance).map(({ name, detail }): [string, React.ReactNode] => [
           name,
           detail.startsWith("///") ? <What3Words key={name} address={detail} /> : detail,
         ]),
-        ["Routes", ROUTES.map((r) => `${r.id} ${r.name}`).join(" · ")],
+        ["Routes", routes.map((r) => `${r.id} ${r.name}`).join(" · ")],
       ]}
     />
   );

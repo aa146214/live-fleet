@@ -3,7 +3,9 @@
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { countByRoute, getPlace, type PlaceId } from "@/lib/routes";
+import { countByRoute, DEFAULT_ROUTES, getPlace, placesFor, type PlaceId } from "@/lib/routes";
+import { RoutesProvider } from "@/lib/routes-context";
+import type { RouteId } from "@/lib/types";
 import { useFleet } from "@/lib/use-fleet";
 import { AppHeader } from "./AppHeader";
 import { FadeThrough } from "./FadeThrough";
@@ -27,11 +29,12 @@ export function LiveMapScreen() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const selectedParam = searchParams.get("vehicle");
-  const selectedPlace = getPlace(searchParams.get("place")) ?? null;
+  const routes = snapshot?.routes ?? DEFAULT_ROUTES;
+  const selectedPlace = getPlace(placesFor(routes), searchParams.get("place")) ?? null;
 
   const visibleVehicles = useMemo(() => snapshot?.vehicles ?? [], [snapshot]);
   const selected = visibleVehicles.find((vehicle) => vehicle.code === selectedParam) ?? null;
-  const routeCounts = useMemo(() => (snapshot ? countByRoute(snapshot.vehicles) : null), [snapshot]);
+  const routeCounts = useMemo(() => (snapshot ? countByRoute(routes, snapshot.vehicles) : null), [snapshot, routes]);
 
   const [expanded, setExpanded] = useState(false);
   const firstVehicles = visibleVehicles.slice(0, LIST_LIMIT);
@@ -78,6 +81,17 @@ export function LiveMapScreen() {
   const selectPlace = useCallback((id: PlaceId) => setSelection({ place: id }), [setSelection]);
   const clearSelection = useCallback(() => setSelection(null), [setSelection]);
 
+  // Picking a route in the header drops any selection (so the map isn't pulled back to it)
+  // and asks the map to show that route's area. The counter makes repeat picks count.
+  const [routeFocus, setRouteFocus] = useState<{ routeId: RouteId; request: number } | null>(null);
+  const showRoute = useCallback(
+    (routeId: RouteId) => {
+      clearSelection();
+      setRouteFocus((previous) => ({ routeId, request: (previous?.request ?? 0) + 1 }));
+    },
+    [clearSelection],
+  );
+
   const hasDetails = Boolean(selected || selectedPlace);
   useEffect(() => {
     if (!hasDetails) return;
@@ -91,84 +105,87 @@ export function LiveMapScreen() {
   const mode = snapshot?.mode ?? null;
 
   return (
-    <div className={`${styles.screen} ${hasDetails ? styles.hasSelection : ""}`}>
-      <AppHeader routeCounts={routeCounts} />
+    <RoutesProvider value={routes}>
+      <div className={`${styles.screen} ${hasDetails ? styles.hasSelection : ""}`}>
+        <AppHeader routeCounts={routeCounts} onSelectRoute={showRoute} />
 
-      {error && (
-        <p className={styles.error} role="alert">
-          Live data unavailable ({error}).{" "}
-          {snapshot ? "Showing the last known positions." : "Retrying shortly."}
-        </p>
-      )}
+        {error && (
+          <p className={styles.error} role="alert">
+            Live data unavailable ({error}).{" "}
+            {snapshot ? "Showing the last known positions." : "Retrying shortly."}
+          </p>
+        )}
 
-      <main className={styles.main}>
-        <div className={styles.mapArea}>
-          <FleetMap
-            vehicles={visibleVehicles}
-            selectedCode={selected?.code ?? null}
-            onSelect={select}
-            selectedPlaceId={selectedPlace?.id ?? null}
-            onSelectPlace={selectPlace}
-            mode={mode}
-            clockAheadMs={clockAheadMs}
-          />
-        </div>
-
-        <aside className={styles.panel} aria-label="Vehicles">
-          <div className={`${styles.listSection} ${hasDetails ? styles.withDetails : ""}`}>
-            <h2 className={styles.panelTitle}>All vehicles</h2>
-            <p className={styles.panelHint}>Select a minibus to see its details.</p>
-            {!snapshot ? (
-              <p className={styles.empty}>{error ? "Could not load vehicles." : "Loading vehicles…"}</p>
-            ) : visibleVehicles.length === 0 ? (
-              <p className={styles.empty}>No minibuses are reporting a position right now.</p>
-            ) : (
-              <>
-                <div id="vehicle-list" className={styles.list}>
-                  <ul className={styles.rows}>{firstVehicles.map(renderRow)}</ul>
-                  {pinnedSelection && (
-                    <ul className={`${styles.rows} ${styles.pinned}`} key={pinnedSelection.id}>
-                      {renderRow(pinnedSelection)}
-                    </ul>
-                  )}
-                  {moreVehicles.length > 0 && (
-                    // Animates open and closed; `inert` keeps hidden rows out of the tab order.
-                    <div className={`${styles.more} ${expanded ? styles.moreOpen : ""}`} inert={!expanded}>
-                      <ul className={styles.rows}>{moreVehicles.map(renderRow)}</ul>
-                    </div>
-                  )}
-                </div>
-                {visibleVehicles.length > LIST_LIMIT && (
-                  <button
-                    type="button"
-                    className={styles.showMore}
-                    aria-expanded={expanded}
-                    aria-controls="vehicle-list"
-                    onClick={() => setExpanded((value) => !value)}
-                  >
-                    {expanded ? "Show fewer" : `Show ${hiddenCount} more`}
-                  </button>
-                )}
-              </>
-            )}
+        <main className={styles.main}>
+          <div className={styles.mapArea}>
+            <FleetMap
+              vehicles={visibleVehicles}
+              selectedCode={selected?.code ?? null}
+              onSelect={select}
+              selectedPlaceId={selectedPlace?.id ?? null}
+              onSelectPlace={selectPlace}
+              mode={mode}
+              routeFocus={routeFocus}
+              clockAheadMs={clockAheadMs}
+            />
           </div>
 
-          <div ref={detailsRef}>
-            <FadeThrough contentKey={selected ? `vehicle:${selected.code}` : selectedPlace ? `place:${selectedPlace.id}` : ""}>
-              {selected ? (
-                <VehicleDetails vehicle={selected} onClose={clearSelection} />
-              ) : selectedPlace ? (
-                <PlaceDetails place={selectedPlace} routeCounts={routeCounts} onClose={clearSelection} />
+          <aside className={styles.panel} aria-label="Vehicles">
+            <div className={`${styles.listSection} ${hasDetails ? styles.withDetails : ""}`}>
+              <h2 className={styles.panelTitle}>All vehicles</h2>
+              <p className={styles.panelHint}>Select a minibus to see its details.</p>
+              {!snapshot ? (
+                <p className={styles.empty}>{error ? "Could not load vehicles." : "Loading vehicles…"}</p>
+              ) : visibleVehicles.length === 0 ? (
+                <p className={styles.empty}>No minibuses are reporting a position right now.</p>
               ) : (
-                <div className={styles.guidance}>
-                  <p className={styles.guidanceTitle}>Tap a minibus or location for details</p>
-                  <p className={styles.guidanceText}>Arrows show the direction of travel</p>
-                </div>
+                <>
+                  <div id="vehicle-list" className={styles.list}>
+                    <ul className={styles.rows}>{firstVehicles.map(renderRow)}</ul>
+                    {pinnedSelection && (
+                      <ul className={`${styles.rows} ${styles.pinned}`} key={pinnedSelection.id}>
+                        {renderRow(pinnedSelection)}
+                      </ul>
+                    )}
+                    {moreVehicles.length > 0 && (
+                      // Animates open and closed; `inert` keeps hidden rows out of the tab order.
+                      <div className={`${styles.more} ${expanded ? styles.moreOpen : ""}`} inert={!expanded}>
+                        <ul className={styles.rows}>{moreVehicles.map(renderRow)}</ul>
+                      </div>
+                    )}
+                  </div>
+                  {visibleVehicles.length > LIST_LIMIT && (
+                    <button
+                      type="button"
+                      className={styles.showMore}
+                      aria-expanded={expanded}
+                      aria-controls="vehicle-list"
+                      onClick={() => setExpanded((value) => !value)}
+                    >
+                      {expanded ? "Show fewer" : `Show ${hiddenCount} more`}
+                    </button>
+                  )}
+                </>
               )}
-            </FadeThrough>
-          </div>
-        </aside>
-      </main>
-    </div>
+            </div>
+
+            <div ref={detailsRef}>
+              <FadeThrough contentKey={selected ? `vehicle:${selected.code}` : selectedPlace ? `place:${selectedPlace.id}` : ""}>
+                {selected ? (
+                  <VehicleDetails vehicle={selected} onClose={clearSelection} />
+                ) : selectedPlace ? (
+                  <PlaceDetails place={selectedPlace} routeCounts={routeCounts} onClose={clearSelection} />
+                ) : (
+                  <div className={styles.guidance}>
+                    <p className={styles.guidanceTitle}>Tap a minibus or location for details</p>
+                    <p className={styles.guidanceText}>Arrows show the direction of travel</p>
+                  </div>
+                )}
+              </FadeThrough>
+            </div>
+          </aside>
+        </main>
+      </div>
+    </RoutesProvider>
   );
 }

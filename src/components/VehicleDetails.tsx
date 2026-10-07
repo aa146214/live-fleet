@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { formatUpdated } from "@/lib/format";
-import { getRoute, routeColor, routeSequence, routeSubtitle, shortDestination } from "@/lib/routes";
+import { usePlaces, useRoutes } from "@/lib/routes-context";
+import { getRoute, routeColor, routeSubtitle, shortDestination, stopSequence } from "@/lib/routes";
 import type { Vehicle } from "@/lib/types";
 import { DetailsCard } from "./DetailsCard";
 import styles from "./DetailsCard.module.css";
@@ -12,7 +13,9 @@ interface VehicleDetailsProps {
 
 /** Figma "Vehicle details / W1" (updated design): operator logo, then the vehicle's facts. */
 export function VehicleDetails({ vehicle, onClose }: VehicleDetailsProps) {
-  const route = getRoute(vehicle.routeId);
+  const routes = useRoutes();
+  const places = usePlaces();
+  const route = getRoute(routes, vehicle.routeId);
   const color = routeColor(vehicle.routeId);
 
   return (
@@ -37,7 +40,7 @@ export function VehicleDetails({ vehicle, onClose }: VehicleDetailsProps) {
         ["Vehicle registration", vehicle.registration],
         ["Next destination", shortDestination(vehicle.nextDestination)],
         ["Vehicle location", vehicle.address],
-        ["Route information", route ? routeSequence(route) : "Not assigned to a shuttle route"],
+        ["Route information", vehicle.stops ? stopSequence(places, routes, vehicle.stops) : "Not assigned to a shuttle route"],
         ["Last updated", formatUpdated(vehicle.updatedAt)],
       ]}
     />

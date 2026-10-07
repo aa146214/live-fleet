@@ -11,9 +11,17 @@ import {
   type Placement,
   type Size,
 } from "@/lib/label-placement";
-import { drawnPosition, isStale, startMotion, updateMotion, type Fix, type Motion } from "@/lib/motion";
-import { getRoute, PLACES, routeColor, type Place, type PlaceId } from "@/lib/routes";
-import type { FleetSnapshot, Vehicle } from "@/lib/types";
+import { drawnPosition, firstMotion, isStale, updateMotion, type Fix, type Motion } from "@/lib/motion";
+import {
+  getRoute,
+  NORTH_ENTRANCE_LOCATION,
+  routeColor,
+  SOUTH_ENTRANCE_LOCATION,
+  type Place,
+  type PlaceId,
+} from "@/lib/routes";
+import { usePlaces, useRoutes } from "@/lib/routes-context";
+import type { FleetSnapshot, RouteId, Vehicle } from "@/lib/types";
 import styles from "./FleetMap.module.css";
 
 const DEFAULT_CENTER: L.LatLngTuple = [51.695, -0.405];
@@ -49,6 +57,8 @@ export interface FleetMapProps {
   selectedPlaceId: PlaceId | null;
   onSelectPlace: (id: PlaceId) => void;
   mode: FleetSnapshot["mode"] | null;
+  /** Asks the map to show a route's area; a new `request` number is a new ask. */
+  routeFocus: { routeId: RouteId; request: number } | null;
   /** How far this browser's clock is ahead of FleetSmart's, so report times can be compared with it. */
   clockAheadMs: number;
 }
@@ -149,6 +159,7 @@ function VehicleMarker({
   animated,
   onSelect,
   onMarker,
+  shownHeading,
 }: {
   vehicle: Vehicle;
   scale: number;
@@ -160,6 +171,8 @@ function VehicleMarker({
   animated: boolean;
   onSelect: (code: string) => void;
   onMarker: (id: string, marker: L.Marker | null) => void;
+  /** The angle the layer last drew this bus at, if it animates it. */
+  shownHeading: (id: string) => number | undefined;
 }) {
   const { code, routeId, heading } = vehicle;
   const { x, y } = placement;
@@ -177,14 +190,23 @@ function VehicleMarker({
     return () => clearTimeout(timer);
   }, [animateLabel]);
 
+  // An animated bus is turned by the layer, so a new report's heading must not rebuild the icon
+  // (which would snap the bus to that heading); only whether it has an arrow matters.
+  const hasHeading = heading !== null;
+  const iconHeading = animated ? (hasHeading ? 0 : null) : heading;
   const icon = useMemo(
-    () => busIcon({ code, routeId, heading }, scale, selected, labelled, stale, animateLabel, { x, y }),
-    [code, routeId, heading, scale, selected, labelled, stale, animateLabel, x, y],
+    () => {
+      const drawnHeading = animated ? (shownHeading(vehicle.id) ?? heading) : heading;
+      return busIcon({ code, routeId, heading: hasHeading ? drawnHeading : null }, scale, selected, labelled, stale, animateLabel, { x, y });
+    },
+    // `iconHeading` stands in for `heading`: new report headings must not rebuild an animated icon.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [code, routeId, iconHeading, scale, selected, labelled, stale, animateLabel, x, y],
   );
   const [startPosition] = useState<L.LatLngTuple>(() => [vehicle.lat, vehicle.lng]);
   const reportedPosition = useMemo<L.LatLngTuple>(() => [vehicle.lat, vehicle.lng], [vehicle.lat, vehicle.lng]);
   const ref = useCallback((marker: L.Marker | null) => onMarker(vehicle.id, marker), [onMarker, vehicle.id]);
-  const route = getRoute(routeId);
+  const route = getRoute(useRoutes(), routeId);
   const label = `Minibus ${code}${route ? `, Route ${route.id} ${route.name}` : ""}`;
 
   return (
@@ -220,16 +242,21 @@ const toFix = (v: Vehicle, clockAheadMs: number): Fix => ({
   report: v.updatedAt ?? "",
   at: v.updatedAt ? Date.parse(v.updatedAt) + clockAheadMs : Date.now(),
   road: v.road,
+  ahead: v.ahead,
+  // FleetSmart reports speed in mph.
+  speed: v.speedMph === null ? null : v.speedMph * 0.44704,
 });
 
 /** Turns a bus marker to `heading` the short way round, from whatever angle it shows now. */
-function pointBus(marker: L.Marker | undefined, heading: number | null) {
+function pointBus(marker: L.Marker | undefined, heading: number | null): number | undefined {
   const bus = marker?.getElement()?.querySelector<HTMLElement>(`.${styles.bus}`);
-  if (!bus || heading === null) return;
+  if (!bus || heading === null) return undefined;
   const current = Number(/rotate\(([-\d.]+)deg\)/.exec(bus.style.transform)?.[1] ?? 0);
   const turn = ((((heading - current) % 360) + 540) % 360) - 180;
-  if (Math.abs(turn) < 0.5) return;
-  bus.style.transform = bus.style.transform.replace(/rotate\([^)]*\)/, `rotate(${(current + turn).toFixed(1)}deg)`);
+  if (Math.abs(turn) < 0.5) return current;
+  const next = current + turn;
+  bus.style.transform = bus.style.transform.replace(/rotate\([^)]*\)/, `rotate(${next.toFixed(1)}deg)`);
+  return next;
 }
 
 /**
@@ -240,6 +267,9 @@ function pointBus(marker: L.Marker | undefined, heading: number | null) {
 function useLiveMotion(vehicles: Vehicle[], enabled: boolean, clockAheadMs: number) {
   const motions = useRef(new Map<string, Motion>());
   const markers = useRef(new Map<string, L.Marker>());
+  // The angle each bus is drawn at, so a rebuilt icon starts there instead of snapping elsewhere.
+  const shown = useRef(new Map<string, number>());
+  const shownHeading = useCallback((id: string) => shown.current.get(id), []);
   const [drawn, setDrawn] = useState<DrawnPositions>(NOT_DRAWN);
 
   const registerMarker = useCallback((id: string, marker: L.Marker | null) => {
@@ -253,7 +283,7 @@ function useLiveMotion(vehicles: Vehicle[], enabled: boolean, clockAheadMs: numb
     for (const vehicle of vehicles) {
       const current = motions.current.get(vehicle.id);
       const fix = toFix(vehicle, clockAheadMs);
-      next.set(vehicle.id, current ? updateMotion(current, fix, now) : startMotion(fix));
+      next.set(vehicle.id, current ? updateMotion(current, fix, now) : firstMotion(fix, now));
     }
     motions.current = next;
   }, [vehicles, clockAheadMs]);
@@ -268,7 +298,8 @@ function useLiveMotion(vehicles: Vehicle[], enabled: boolean, clockAheadMs: numb
         const { lat, lng, heading } = drawnPosition(motion, now);
         const marker = markers.current.get(id);
         marker?.setLatLng([lat, lng]);
-        pointBus(marker, heading);
+        const angle = pointBus(marker, heading);
+        if (angle !== undefined) shown.current.set(id, angle);
       }
       if (now - lastShared >= LAYOUT_INTERVAL_MS) {
         lastShared = now;
@@ -287,8 +318,11 @@ function useLiveMotion(vehicles: Vehicle[], enabled: boolean, clockAheadMs: numb
     return () => cancelAnimationFrame(frame);
   }, [enabled]);
 
-  return { drawn: enabled ? drawn : NOT_DRAWN, registerMarker };
+  return { drawn: enabled ? drawn : NOT_DRAWN, registerMarker, markers, shownHeading };
 }
+
+/** Zoom a selected minibus is flown to, if the map is further out than this. */
+const FOLLOW_ZOOM = 15;
 
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 function subscribeToReducedMotion(onChange: () => void) {
@@ -318,8 +352,28 @@ function VehicleLayer({
   clockAheadMs,
 }: Pick<FleetMapProps, "vehicles" | "selectedCode" | "onSelect" | "clockAheadMs"> & { animate: boolean }) {
   const map = useMap();
-  const { drawn, registerMarker } = useLiveMotion(vehicles, animate, clockAheadMs);
+  const { drawn, registerMarker, markers, shownHeading } = useLiveMotion(vehicles, animate, clockAheadMs);
   const positionOf = useCallback((v: Vehicle) => drawn.get(v.id) ?? v, [drawn]);
+
+  // Fly to a minibus where it is drawn now when it's selected, then keep it in view as it drives.
+  const selectedId = vehicles.find((v) => v.code === selectedCode)?.id;
+  const flownTo = useRef<{ id: string; at: number }>(undefined);
+  useEffect(() => {
+    const marker = selectedId ? markers.current.get(selectedId) : undefined;
+    if (!selectedId || !marker) {
+      flownTo.current = undefined;
+      return;
+    }
+    const position = marker.getLatLng();
+    if (flownTo.current?.id !== selectedId) {
+      flownTo.current = { id: selectedId, at: Date.now() };
+      const zoom = Math.max(map.getZoom(), FOLLOW_ZOOM);
+      if (animate) map.flyTo(position, zoom, { duration: 1 });
+      else map.setView(position, zoom, { animate: false });
+    } else if (Date.now() - flownTo.current.at > 1500 && !map.getBounds().pad(-0.15).contains(position)) {
+      map.panTo(position);
+    }
+  }, [map, selectedId, drawn, animate]); // eslint-disable-line react-hooks/exhaustive-deps
   // Bumped whenever the view changes so the label layout re-runs.
   const [viewVersion, setViewVersion] = useState(0);
   const handlers = useMemo(() => {
@@ -328,6 +382,7 @@ function VehicleLayer({
   }, []);
   useMapEvents(handlers);
 
+  const places = usePlaces();
   const layout = useMemo(() => {
     void viewVersion;
     const scale = map.getSize().x >= 600 ? DESKTOP_BUS_SCALE : MOBILE_BUS_SCALE;
@@ -341,7 +396,7 @@ function VehicleLayer({
         return [v.id, { x, y, ...busBox(drawn.get(v.id)?.heading ?? v.heading, scale) }];
       }),
     );
-    const pinBoxes: Box[] = PLACES.map((place) => {
+    const pinBoxes: Box[] = places.map((place) => {
       const g = place.routeId === null ? PIN_GEOMETRY.studio : PIN_GEOMETRY.station;
       const { x, y } = map.latLngToContainerPoint([place.lat, place.lng]);
       return { x: x - g.tipX + g.width / 2, y: y - g.tipY + g.height / 2, width: g.width, height: g.height };
@@ -411,7 +466,7 @@ function VehicleLayer({
       result.set(v.id, { labelled: v === selected, placement: roundPlacement(placement) });
     }
     return { result, scale };
-  }, [map, vehicles, selectedCode, viewVersion, positionOf, drawn]);
+  }, [map, vehicles, places, selectedCode, viewVersion, positionOf, drawn]);
 
   return vehicles.map((vehicle) => {
     const { labelled, placement } = layout.result.get(vehicle.id) ?? { labelled: false, placement: { x: 0, y: 0 } };
@@ -427,6 +482,7 @@ function VehicleLayer({
         animated={animate}
         onSelect={onSelect}
         onMarker={registerMarker}
+        shownHeading={shownHeading}
       />
     );
   });
@@ -446,36 +502,58 @@ function PlacePin({ place, selected, onSelect }: { place: Place; selected: boole
   );
 }
 
-function boundsFor(vehicles: Vehicle[]): L.LatLngBounds {
+function boundsFor(vehicles: Vehicle[], places: Place[]): L.LatLngBounds {
   const points: L.LatLngTuple[] = vehicles.length
     ? vehicles.map((v) => [v.lat, v.lng])
-    : PLACES.map((p) => [p.lat, p.lng]);
+    : places.map((p) => [p.lat, p.lng]);
   return L.latLngBounds(points);
 }
 
-/** Fits the fleet once, follows the selected minibus or place, and reacts to container resizes. */
+/** Fits the fleet once, pans to the selected place, and reacts to container resizes. */
 function MapBehaviour({
   vehicles,
   selectedCode,
   selectedPlaceId,
-}: Pick<FleetMapProps, "vehicles" | "selectedCode" | "selectedPlaceId">) {
+  routeFocus,
+}: Pick<FleetMapProps, "vehicles" | "selectedCode" | "selectedPlaceId" | "routeFocus">) {
   const map = useMap();
+  const routes = useRoutes();
+  const places = usePlaces();
   const hasFitted = useRef(false);
+
+  // Shows a route's area: its station, the studio and its minibuses as they are now.
+  const latestVehicles = useRef(vehicles);
+  useEffect(() => {
+    latestVehicles.current = vehicles;
+  }, [vehicles]);
+  const focusRequest = routeFocus?.request;
+  useEffect(() => {
+    if (!routeFocus) return;
+    const route = getRoute(routes, routeFocus.routeId);
+    if (!route) return;
+    const points: L.LatLngTuple[] = [
+      [route.stationLocation.lat, route.stationLocation.lng],
+      [NORTH_ENTRANCE_LOCATION.lat, NORTH_ENTRANCE_LOCATION.lng],
+      [SOUTH_ENTRANCE_LOCATION.lat, SOUTH_ENTRANCE_LOCATION.lng],
+    ];
+    for (const v of latestVehicles.current) if (v.routeId === route.id) points.push([v.lat, v.lng]);
+    map.flyToBounds(L.latLngBounds(points), { padding: FIT_PADDING, duration: 1 });
+  }, [map, focusRequest]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (hasFitted.current || vehicles.length === 0) return;
     hasFitted.current = true;
-    const placeBounds = L.latLngBounds(PLACES.map((p) => [p.lat, p.lng]));
-    map.fitBounds(boundsFor(vehicles).extend(placeBounds), { padding: FIT_PADDING });
-  }, [map, vehicles]);
+    const placeBounds = L.latLngBounds(places.map((p) => [p.lat, p.lng]));
+    map.fitBounds(boundsFor(vehicles, places).extend(placeBounds), { padding: FIT_PADDING });
+  }, [map, vehicles, places]);
 
-  const selected = vehicles.find((v) => v.code === selectedCode) ?? PLACES.find((p) => p.id === selectedPlaceId);
+  // Minibuses are followed by the vehicle layer, which knows where they are drawn.
+  const selected = selectedCode ? undefined : places.find((p) => p.id === selectedPlaceId);
   useEffect(() => {
     if (!selected) return;
     const position = L.latLng(selected.lat, selected.lng);
     if (!map.getBounds().pad(-0.15).contains(position)) map.panTo(position);
-    // Pan when the selection changes or the selected minibus moves.
-  }, [map, selectedCode, selectedPlaceId, selected?.lat, selected?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [map, selected]);
 
   useEffect(() => {
     const observer = new ResizeObserver(() => map.invalidateSize());
@@ -493,12 +571,13 @@ export default function FleetMap({
   selectedPlaceId,
   onSelectPlace,
   mode,
+  routeFocus,
   clockAheadMs,
 }: FleetMapProps) {
   const [map, setMap] = useState<L.Map | null>(null);
-  // Only real positions are animated; the demo buses are illustrations.
+  const places = usePlaces();
   const reducedMotion = usePrefersReducedMotion();
-  const animate = mode === "live" && !reducedMotion;
+  const animate = mode !== null && !reducedMotion;
 
   return (
     <div className={styles.wrapper}>
@@ -511,7 +590,7 @@ export default function FleetMap({
         attributionControl={false}
       >
         <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" maxZoom={19} />
-        {PLACES.map((place) => (
+        {places.map((place) => (
           <PlacePin
             key={place.id}
             place={place}
@@ -526,7 +605,12 @@ export default function FleetMap({
           animate={animate}
           clockAheadMs={clockAheadMs}
         />
-        <MapBehaviour vehicles={vehicles} selectedCode={selectedCode} selectedPlaceId={selectedPlaceId} />
+        <MapBehaviour
+          vehicles={vehicles}
+          selectedCode={selectedCode}
+          selectedPlaceId={selectedPlaceId}
+          routeFocus={routeFocus}
+        />
       </MapContainer>
 
       <div className={styles.north} aria-hidden="true">
@@ -545,7 +629,7 @@ export default function FleetMap({
           type="button"
           className={styles.control}
           aria-label="Show all minibuses"
-          onClick={() => map?.fitBounds(boundsFor(vehicles), { padding: FIT_PADDING })}
+          onClick={() => map?.fitBounds(boundsFor(vehicles, places), { padding: FIT_PADDING })}
         >
           ⌖
         </button>
