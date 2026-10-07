@@ -1,4 +1,5 @@
 import { distanceMetres } from "./destination";
+import type { RoadRoute, Street } from "./polyline-simulation";
 import type { LatLng } from "./routes";
 import type { Vehicle } from "./types";
 
@@ -121,6 +122,125 @@ async function fetchRoad(from: Report, to: Report): Promise<LatLng[] | null> {
     return points.length >= 2 ? points : null;
   } catch {
     return null;
+  }
+}
+
+interface ValhallaManeuver {
+  street_names?: string[];
+  begin_shape_index?: number;
+}
+
+/**
+ * The bus route through `stops`, with the street it follows along the way, or null if
+ * the router can't find one. Used by the demo, which has no reports to route between.
+ */
+export async function fetchBusRoute(stops: LatLng[]): Promise<RoadRoute | null> {
+  if (stops.length < 2) return null;
+  await routerTurn();
+  const request = {
+    locations: stops.map((stop) => ({ lat: stop.lat, lon: stop.lng, radius: SNAP_RADIUS_M })),
+    costing: "bus",
+    directions_type: "maneuvers",
+    units: "kilometers",
+  };
+  try {
+    const response = await fetch(`${VALHALLA_URL}/route?json=${encodeURIComponent(JSON.stringify(request))}`, {
+      headers: { "User-Agent": "leavesden-shuttle-live-map" },
+      signal: AbortSignal.timeout(ROUTER_TIMEOUT_MS),
+    });
+    if (!response.ok) return null;
+    const legs: { shape?: string; maneuvers?: ValhallaManeuver[] }[] = (await response.json())?.trip?.legs ?? [];
+
+    const polyline: LatLng[] = [];
+    const streets: Street[] = [];
+    const along: number[] = []; // distance from the start to each point of `polyline`
+    for (const leg of legs) {
+      if (typeof leg.shape !== "string") return null;
+      // Each leg starts where the last ended; maneuver indexes count from the leg's own start.
+      const base = polyline.length === 0 ? 0 : polyline.length - 1;
+      const points = decodePolyline6(leg.shape);
+      for (const point of polyline.length === 0 ? points : points.slice(1)) {
+        along.push(polyline.length === 0 ? 0 : along[along.length - 1] + distanceMetres(polyline[polyline.length - 1], point));
+        polyline.push(point);
+      }
+      for (const maneuver of leg.maneuvers ?? []) {
+        const name = maneuver.street_names?.[0];
+        const fromMeters = along[base + (maneuver.begin_shape_index ?? 0)];
+        if (name && fromMeters !== undefined && name !== streets[streets.length - 1]?.name) {
+          streets.push({ fromMeters, name });
+        }
+      }
+    }
+    return polyline.length >= 2 ? { polyline, streets } : null;
+  } catch {
+    return null;
+  }
+}
+
+interface NearestRoad {
+  street: string | null;
+  /** The nearest point on the road. */
+  point: LatLng | null;
+}
+
+/** Roads already looked up, by position rounded to about a metre. */
+const nearestRoads = new Map<string, NearestRoad>();
+const roadLookups = new Set<string>();
+const MAX_NEAREST_ROADS = 500;
+
+/**
+ * The road nearest `position` according to the router, if it has been looked up. The
+ * first call for a spot starts the lookup in the background and returns undefined;
+ * later calls (the next snapshot) get the answer.
+ */
+export function nearestRoad(position: LatLng): NearestRoad | undefined {
+  const key = `${position.lat.toFixed(5)},${position.lng.toFixed(5)}`;
+  const known = nearestRoads.get(key);
+  if (known) return known;
+  if (roadLookups.has(key)) return undefined;
+  roadLookups.add(key);
+  void lookUpRoad(position).then((road) => {
+    if (nearestRoads.size >= MAX_NEAREST_ROADS) nearestRoads.clear();
+    nearestRoads.set(key, road);
+    roadLookups.delete(key);
+  });
+  return undefined;
+}
+
+/** The name of the road nearest `position`; see `nearestRoad`. */
+export const streetNear = (position: LatLng): string | undefined => nearestRoad(position)?.street ?? undefined;
+
+async function lookUpRoad(position: LatLng): Promise<NearestRoad> {
+  const none = { street: null, point: null };
+  await routerTurn();
+  const request = {
+    locations: [{ lat: position.lat, lon: position.lng, radius: SNAP_RADIUS_M }],
+    costing: "bus",
+    verbose: true,
+  };
+  try {
+    const response = await fetch(`${VALHALLA_URL}/locate?json=${encodeURIComponent(JSON.stringify(request))}`, {
+      headers: { "User-Agent": "leavesden-shuttle-live-map" },
+      signal: AbortSignal.timeout(ROUTER_TIMEOUT_MS),
+    });
+    if (!response.ok) return none;
+    const edges: {
+      distance?: number;
+      correlated_lat?: number;
+      correlated_lon?: number;
+      edge_info?: { names?: string[] };
+    }[] = (await response.json())?.[0]?.edges ?? [];
+    const nearest = [...edges].sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0];
+    const named = edges.find((edge) => edge.edge_info?.names?.[0]);
+    return {
+      street: named?.edge_info?.names?.[0] ?? null,
+      point:
+        nearest?.correlated_lat !== undefined && nearest.correlated_lon !== undefined
+          ? { lat: nearest.correlated_lat, lng: nearest.correlated_lon }
+          : null,
+    };
+  } catch {
+    return none;
   }
 }
 

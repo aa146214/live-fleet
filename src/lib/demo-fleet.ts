@@ -1,4 +1,7 @@
-import { STUDIO_DESTINATION } from "./routes";
+import { slicePolyline, positionAtDistance, streetAt } from "./polyline-simulation";
+import { loopStopsFor, loopWithin, nextStop, roadAhead } from "./route-loops";
+import { getRoutes } from "./config-store";
+import { defaultStops, getRoute, placesFor, STUDIO_DESTINATION } from "./routes";
 import type { FleetSnapshot, Vehicle } from "./types";
 
 // Illustrative vehicles from the Figma design, used when no FleetSmart credentials are set.
@@ -83,11 +86,70 @@ const DEMO_VEHICLES: Omit<Vehicle, "updatedAt">[] = [
   },
 ];
 
-export function demoSnapshot(now = new Date()): FleetSnapshot {
-  const fetchedAt = now.toISOString();
+/** The demo minibuses "report" this often, on the clock, so every poll sees a new report. */
+const REPORT_INTERVAL_MS = 15_000;
+const MPH_TO_MPS = 0.44704;
+/** The router answers one request a second, so the first snapshot waits this long, then goes without. */
+const LOOP_WAIT_MS = 4000;
+/**
+ * Illustrative vehicles that keep driving: each shuttles along the road between its
+ * route's station and the studio, reporting every REPORT_INTERVAL_MS like a tracker,
+ * with the road driven since the last report attached. Positions come from the clock
+ * alone, so the answer needs no state and every browser sees the same minibuses.
+ */
+export async function demoSnapshot(now = new Date()): Promise<FleetSnapshot> {
+  const reportAt = Math.floor(now.getTime() / REPORT_INTERVAL_MS) * REPORT_INTERVAL_MS;
+  const updatedAt = new Date(reportAt).toISOString();
+  const previousAt = new Date(reportAt - REPORT_INTERVAL_MS).toISOString();
+
+  const routes = await getRoutes();
+  const places = placesFor(routes);
+  const vehicles = await Promise.all(
+    DEMO_VEHICLES.map(async (vehicle): Promise<Vehicle> => {
+      const route = getRoute(routes, vehicle.routeId);
+      if (!route) return { ...vehicle, updatedAt };
+      const stopIds = defaultStops(route);
+      const stops = loopStopsFor(stopIds, places, routes);
+      if (!stops) return { ...vehicle, updatedAt };
+      const loop = await loopWithin(stops, LOOP_WAIT_MS);
+      const { points, cycle, streets } = loop;
+      if (cycle === 0) return { ...vehicle, updatedAt };
+
+      const speed = (vehicle.speedMph ?? 20) * MPH_TO_MPS;
+      // Minibuses on the same route start at different points along it.
+      const peers = DEMO_VEHICLES.filter((v) => v.routeId === vehicle.routeId);
+      const offset = (0.2 + (0.5 * peers.indexOf(vehicle)) / peers.length) * (cycle / 2);
+      const at = (ms: number) => ((((speed * ms) / 1000 + offset) % cycle) + cycle) % cycle;
+
+      const to = at(reportAt);
+      const from = at(reportAt - REPORT_INTERVAL_MS);
+      // The drive since the last report, in two parts if it passed the start of the loop.
+      const road =
+        from <= to
+          ? slicePolyline(points, from, to)
+          : [...slicePolyline(points, from, cycle), ...slicePolyline(points, 0, to)];
+      const { position, heading } = positionAtDistance(points, to);
+
+      return {
+        ...vehicle,
+        lat: position.lat,
+        lng: position.lng,
+        heading: Math.round(heading),
+        address: streetAt(streets, to) ?? vehicle.address,
+        nextDestination: nextStop(loop, to),
+        stops: stopIds,
+        updatedAt,
+        road: { since: previousAt, points: road },
+        ahead: roadAhead(loop, to, speed),
+      };
+    }),
+  );
+
   return {
     mode: "demo",
-    fetchedAt,
-    vehicles: DEMO_VEHICLES.map((vehicle) => ({ ...vehicle, updatedAt: fetchedAt })),
+    fetchedAt: now.toISOString(),
+    serverTime: now.toISOString(),
+    routes,
+    vehicles,
   };
 }

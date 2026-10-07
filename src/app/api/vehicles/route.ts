@@ -7,7 +7,7 @@ export async function GET() {
 
   // FLEET_DEMO=1 forces the design's illustrative vehicles (e.g. for design reviews).
   if (process.env.FLEET_DEMO === "1" || !hasFleetSmartCredentials()) {
-    return Response.json(demoSnapshot(), { headers: { "Cache-Control": "no-store" } });
+    return Response.json(await demoSnapshot(), { headers: { "Cache-Control": "no-store" } });
   }
 
   try {
