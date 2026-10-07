@@ -1,0 +1,249 @@
+.page {
+  min-height: 100vh;
+  background: var(--color-surface);
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px;
+  background: var(--color-navy);
+  color: var(--color-white);
+}
+
+.header h1 {
+  font-size: 18px;
+}
+
+.header nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 14px;
+}
+
+.link {
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 18px;
+  background: var(--color-white);
+}
+
+.cardTitle {
+  font-size: 18px;
+}
+
+.help {
+  color: var(--color-muted);
+  font-size: 14px;
+}
+
+.notice,
+.error {
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+.notice {
+  background: #e6f4ef;
+  color: var(--color-green);
+}
+
+.error {
+  background: #fdecec;
+  color: #b3261e;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--color-muted);
+}
+
+.page input,
+.page select {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-white);
+  color: var(--color-ink);
+  font: inherit;
+}
+
+.page input:focus-visible,
+.page select:focus-visible,
+.page button:focus-visible {
+  outline: 2px solid var(--color-blue);
+  outline-offset: 2px;
+}
+
+.vrn {
+  color: var(--color-muted);
+  letter-spacing: 0.04em;
+}
+
+.primary,
+.secondary,
+.danger {
+  padding: 9px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.primary {
+  background: var(--color-blue);
+  color: var(--color-white);
+}
+
+.secondary {
+  background: var(--color-paleblue);
+  color: var(--color-blue);
+}
+
+.danger {
+  background: #fdecec;
+  color: #b3261e;
+}
+
+.page button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+
+.missing {
+  color: #b3261e;
+  font-size: 13px;
+}
+
+.subTitle {
+  margin-bottom: 4px;
+  font-size: 15px;
+}
+
+/* Vehicle list */
+.list {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.itemText {
+  min-width: 0;
+}
+
+.itemText .help {
+  overflow-wrap: anywhere;
+}
+
+
+
+/* Add / edit a vehicle's route */
+.back {
+  align-self: flex-start;
+  color: var(--color-blue);
+  font-size: 14px;
+}
+
+.cardPlain {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stops {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+  list-style: none;
+}
+
+.stop {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+
+.stopNumber {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--color-paleblue);
+  color: var(--color-blue);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.stopName {
+  flex: 1;
+  min-width: 0;
+}
+
+.icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.addStop {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+a.primary,
+a.secondary {
+  display: inline-block;
+  text-align: center;
+  white-space: nowrap;
+}

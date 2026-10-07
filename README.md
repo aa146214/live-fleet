@@ -12,7 +12,7 @@ cp .env.example .env.local   # then add FLEETSMART_API_KEY
 npm run dev
 ```
 
-Without an API key the app shows the six illustrative minibuses from the design. To force them
+Without an API key the app shows six illustrative minibuses that keep driving their routes. To force them
 while a key is set (e.g. for a design review), run with `FLEET_DEMO=1`.
 
 ## How it works
@@ -38,16 +38,52 @@ drives each minibus along the road it took (`src/lib/road-paths.ts`, `src/lib/mo
 - The marker then drives from where it is to the new report along that road, taking as long as
   the minibus did, and turns to follow it. It moves continuously and stays on the road, about
   one report (roughly a minute) behind the minibus.
-- Nothing is guessed beyond the latest report. If no road is found (router down, odd data), that
-  stretch is a straight line; gaps over 5 minutes or 1.5 km snap.
+- A moving minibus within 60 m of a road is drawn on it (the road the router found, or the
+  route, or the nearest road); parked ones stay where they are reported.
+- A minibus assigned to a route is also followed between reports: the server sends the route's
+  road ahead of it, and the map predicts its position along that road from the report's speed and
+  age (for up to 90 seconds), gliding onto each new report instead of jumping, and waiting if it
+  was ahead rather than going backwards. Minibuses with no route assigned aren't predicted: a
+  guess would leave the road at the first bend, so they stay about one report behind.
+- If no road is found (router down, odd data), that stretch is a straight line; gaps over
+  5 minutes or 1.5 km (500 m when following) snap.
 - A moving minibus that hasn't reported for 2.5 minutes is faded.
 - Report times are the tracker's own (`date_time`). The server sends FleetSmart's current time
   with each response so a viewer's clock being off doesn't skew the timing.
-- Demo buses and viewers who prefer reduced motion get the plain positions.
+- Demo buses are generated on the server from the clock: each drives back and forth along the Valhalla
+  bus route (same router as live mode) between its station and the studio, reporting every 15 seconds, and the map treats those
+  reports like live ones.
+- Viewers who prefer reduced motion get the plain positions.
+
+## Admin
+
+`/admin` lists the shuttles and the other vehicles in your FleetSmart account. **Add route** (or
+**Edit route**) opens one screen where you give the vehicle a code and add its stops one by one
+(stations and the studio's North and South entrances), reorder them and save. The shuttle drives
+the stops in that order and then returns to the first. Changes show on the map within about 30
+seconds.
+
+- A shuttle's route (its colour and group on the map) is chosen in a dropdown, which starts from the first
+  station among its stops.
+- The stops drive the map: the route information on the vehicle card, the next destination (the
+  next stop along the road), and the road the shuttle follows between reports.
+- Sign in with `ADMIN_USERNAME` and `ADMIN_PASSWORD` from the environment. `SESSION_SECRET`
+  (32+ random characters) signs the session cookie, which lasts 8 hours. Use a long password:
+  failed attempts are counted per server instance (5 failures lock that client out for 15 minutes),
+  which slows guessing but isn't a hard limit on serverless hosting.
+- The data lives in Neon Postgres (`DATABASE_URL`). The tables are created (and an older database
+  upgraded) the first time the admin or map reads them. Without `DATABASE_URL` the app falls back to
+  `src/config/vehicle-assignments.ts` (each vehicle gets its route's usual stops) and the admin page
+  says nothing can be saved.
+- Minibuses near the studio that aren't shuttles yet are shown on the map too, labelled by
+  registration and without a route, so you can spot the ones to add.
+- The three routes' names and stations are in `src/lib/routes.ts` (and the `routes` table, which
+  the admin doesn't edit).
 
 ## Configure the shuttles
 
-The FleetSmart account contains the whole fleet, so list the shuttle registrations in
+The FleetSmart account contains the whole fleet, so the shuttles have to be listed. With a
+database, do it in the admin (above). Without one, list the shuttle registrations in
 `src/config/vehicle-assignments.ts`:
 
 ```ts
@@ -56,8 +92,8 @@ export const VEHICLE_ASSIGNMENTS = {
 };
 ```
 
-Until that list has entries, every minibus within 20 km of the studio is shown, labelled by
-registration.
+Minibuses within 20 km of the studio that aren't listed are shown too, labelled by registration
+and without a route.
 
 FleetSmart has no timetable data, so "Next destination" is estimated from the direction of
 travel (towards the studio or towards the route's station).
