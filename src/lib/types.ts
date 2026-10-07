@@ -18,6 +18,13 @@ export interface Vehicle {
   /** When the tracker took this position. */
   updatedAt: string | null;
   nextDestination: string;
+  /** The places this shuttle calls at, in order (place ids, see routes.ts); absent for non-shuttles. */
+  stops?: string[];
+  /**
+   * The route road ahead of this position, in the direction of travel, when the minibus
+   * is moving along a known route. The map drives along it between reports.
+   */
+  ahead?: { lat: number; lng: number }[];
   /** The road driven since the previous report (ending here), when it could be looked up. */
   road?: {
     /** The previous report's time. */
@@ -27,6 +34,8 @@ export interface Vehicle {
 }
 
 export interface FleetSnapshot {
+  /** The routes as the admin has set them up; the defaults apply when absent. */
+  routes?: import("./routes").ShuttleRoute[];
   mode: "live" | "demo";
   vehicles: Vehicle[];
   fetchedAt: string;

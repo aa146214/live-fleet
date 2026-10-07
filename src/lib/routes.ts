@@ -19,14 +19,20 @@ export interface ShuttleRoute {
 
 /** Where shuttles drop off at the studio; the first stop after leaving a station. */
 export const STUDIO_DESTINATION = "Leavesden studio · South Entrance";
-export const STUDIO_DESTINATION_SHORT = "South Entrance";
+const STUDIO_PREFIX = "Leavesden studio · ";
 
 /** Leavesden studio (where the WB pin sits on the map). */
 export const STUDIO_LOCATION: LatLng = { lat: 51.6906, lng: -0.418 };
 /** ///goes.forget.lions; used to estimate whether a shuttle is heading to the studio. */
-export const SOUTH_ENTRANCE_LOCATION: LatLng = { lat: 51.686408, lng: -0.417123 };
+export const SOUTH_ENTRANCE_LOCATION: LatLng = { lat: 51.68640847347995, lng: -0.41707985386221297 };
+export const NORTH_ENTRANCE_LOCATION: LatLng = { lat: 51.69244555843036, lng: -0.416383959638135 };
 
-export const ROUTES: ShuttleRoute[] = [
+/**
+ * The routes as shipped. The admin can edit each route's name, station and what3words
+ * address (they are stored in the database); these are used until then, and when no
+ * database is set up. The colour belongs to the design, so it is only set here.
+ */
+export const DEFAULT_ROUTES: ShuttleRoute[] = [
   {
     id: 1,
     name: "Watford",
@@ -59,38 +65,88 @@ export const ROUTES: ShuttleRoute[] = [
 export const ENTRANCES = [
   { name: "North Entrance", detail: "Warner Drive, WD25 7LP" },
   { name: "South Entrance", detail: "///goes.forget.lions" },
-];
+] as const;
 
-export type PlaceId = "studio" | "station-1" | "station-2" | "station-3";
+export type PlaceId = "studio-north" | "studio-south" | "station-1" | "station-2" | "station-3";
 
-/** Map pins: the studio and each route's station. Tapping one shows its details. */
+/** Map pins: the studio's two entrances and each route's station. Tapping one shows its details. */
 export interface Place extends LatLng {
   id: PlaceId;
   name: string;
   /** The station's route; null for the studio, which every route serves. */
   routeId: RouteId | null;
+  /** For a studio pin, which of ENTRANCES it marks. */
+  entrance?: (typeof ENTRANCES)[number]["name"];
 }
 
-export const PLACES: Place[] = [
-  { id: "studio", name: "Leavesden studio", routeId: null, ...STUDIO_LOCATION },
-  ...ROUTES.map((route) => ({
-    id: `station-${route.id}` as PlaceId,
-    name: route.station,
-    routeId: route.id,
-    ...route.stationLocation,
-  })),
-];
-
-export function getPlace(id: string | null): Place | undefined {
-  return PLACES.find((place) => place.id === id);
+export function placesFor(routes: ShuttleRoute[]): Place[] {
+  return [
+    {
+      id: "studio-north",
+      name: "Leavesden studio · North Entrance",
+      routeId: null,
+      entrance: "North Entrance",
+      ...NORTH_ENTRANCE_LOCATION,
+    },
+    {
+      id: "studio-south",
+      name: "Leavesden studio · South Entrance",
+      routeId: null,
+      entrance: "South Entrance",
+      ...SOUTH_ENTRANCE_LOCATION,
+    },
+    ...routes.map((route) => ({
+      id: `station-${route.id}` as PlaceId,
+      name: route.station,
+      routeId: route.id,
+      ...route.stationLocation,
+    })),
+  ];
 }
 
-export function getRoute(id: RouteId | null): ShuttleRoute | undefined {
-  return ROUTES.find((route) => route.id === id);
+export function getPlace(places: Place[], id: string | null): Place | undefined {
+  return places.find((place) => place.id === id);
+}
+
+export function getRoute(routes: ShuttleRoute[], id: RouteId | null): ShuttleRoute | undefined {
+  return routes.find((route) => route.id === id);
+}
+
+/** A vehicle's route: the places it calls at, in order, then back to the first. */
+export function defaultStops(route: ShuttleRoute): PlaceId[] {
+  const station = `station-${route.id}` as PlaceId;
+  return [station, "studio-south", "studio-north", station];
+}
+
+export function isPlaceId(value: string): value is PlaceId {
+  return value === "studio-north" || value === "studio-south" || /^station-[1-3]$/.test(value);
+}
+
+/** The route a list of stops belongs to: that of the first station in it (null if none). */
+export function routeIdOfStops(stops: readonly PlaceId[]): RouteId | null {
+  const station = stops.find((stop) => stop.startsWith("station-"));
+  return station ? (Number(station.slice("station-".length)) as RouteId) : null;
+}
+
+/** How a stop is written in a route sequence: the station's route name, or the entrance. */
+export function stopLabel(places: Place[], routes: ShuttleRoute[], id: string): string {
+  const place = getPlace(places, id);
+  if (!place) return id;
+  return getRoute(routes, place.routeId)?.terminus ?? place.entrance ?? place.name;
+}
+
+/** e.g. "Watford Junction → South Entrance → North Entrance → Watford Junction" */
+export function stopSequence(places: Place[], routes: ShuttleRoute[], stops: readonly string[]): string {
+  return stops.map((id) => stopLabel(places, routes, id)).join(" → ");
+}
+
+/** The minibus's "next destination" text for a stop. */
+export function destinationOf(place: Place, routes: ShuttleRoute[]): string {
+  return getRoute(routes, place.routeId)?.station ?? place.name;
 }
 
 export function routeSequence(route: ShuttleRoute): string {
-  return `${route.terminus} → South Entrance → North Entrance → ${route.terminus}`;
+  return stopSequence(placesFor([route]), [route], defaultStops(route));
 }
 
 /** e.g. "Route 1 · Watford Station" */
@@ -100,18 +156,19 @@ export function routeSubtitle(route: ShuttleRoute): string {
 
 /** The details card shortens the studio stop to just the entrance. */
 export function shortDestination(destination: string): string {
-  return destination === STUDIO_DESTINATION ? STUDIO_DESTINATION_SHORT : destination;
+  return destination.startsWith(STUDIO_PREFIX) ? destination.slice(STUDIO_PREFIX.length) : destination;
 }
 
 /** How many of the given minibuses are assigned to each route (unassigned ones aren't counted). */
-export function countByRoute(vehicles: Vehicle[]): Map<RouteId, number> {
-  const counts = new Map<RouteId, number>(ROUTES.map((route) => [route.id, 0]));
+export function countByRoute(routes: ShuttleRoute[], vehicles: Vehicle[]): Map<RouteId, number> {
+  const counts = new Map<RouteId, number>(routes.map((route) => [route.id, 0]));
   for (const vehicle of vehicles) {
     if (vehicle.routeId !== null) counts.set(vehicle.routeId, (counts.get(vehicle.routeId) ?? 0) + 1);
   }
   return counts;
 }
 
+/** The route's colour, which is fixed by the design, so it doesn't depend on the stored routes. */
 export function routeColor(id: RouteId | null): string {
-  return getRoute(id)?.color ?? "var(--color-navy)";
+  return getRoute(DEFAULT_ROUTES, id)?.color ?? "var(--color-navy)";
 }

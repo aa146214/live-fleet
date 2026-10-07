@@ -1,5 +1,5 @@
-import { getRoute, SOUTH_ENTRANCE_LOCATION, STUDIO_DESTINATION, type LatLng } from "./routes";
-import type { RouteId, VehicleStatus } from "./types";
+import { SOUTH_ENTRANCE_LOCATION, STUDIO_DESTINATION, type LatLng, type ShuttleRoute } from "./routes";
+import type { VehicleStatus } from "./types";
 
 const EARTH_RADIUS_M = 6_371_000;
 const toRad = (deg: number) => (deg * Math.PI) / 180;
@@ -33,11 +33,10 @@ function angleBetween(a: number, b: number): number {
  */
 export function estimateNextDestination(
   position: LatLng,
-  routeId: RouteId | null,
+  route: ShuttleRoute | undefined,
   heading: number | null,
   status: VehicleStatus,
 ): string {
-  const route = getRoute(routeId);
   if (!route) return "Not on a shuttle route";
 
   const ends = [
