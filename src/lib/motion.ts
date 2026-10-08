@@ -170,12 +170,17 @@ export function startMotion(fix: Fix): Motion {
   return { fix, path: makePath([fixPoint(fix)]), start: 0, duration: 0, onRoad: false };
 }
 
+/** A report older than this is already history: its drive isn't replayed when the map opens. */
+const REPLAY_MAX_AGE_MS = 2 * 60_000;
+
 /**
  * The first motion for a minibus. With the road from its previous report known, it
  * drives that road to the report straight away, rather than sitting still until the
- * next report arrives.
+ * next report arrives. A report that is already old (a parked minibus's last report,
+ * say) is just put where it was reported: it isn't moving.
  */
 export function firstMotion(fix: Fix, now: number): Motion {
+  if (now - fix.at > REPLAY_MAX_AGE_MS) return startMotion(fix);
   if (canFollow(fix)) return followMotion(null, fix, now);
   const road = fix.road ? makePath([...fix.road.points, fixPoint(fix)]) : null;
   if (!road || road.points.length < 2) return startMotion(fix);
