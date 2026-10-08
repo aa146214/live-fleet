@@ -57,6 +57,8 @@ export interface FleetMapProps {
   selectedPlaceId: PlaceId | null;
   onSelectPlace: (id: PlaceId) => void;
   mode: FleetSnapshot["mode"] | null;
+  /** Counts each time a minibus is picked, even the one already selected, to follow it again. */
+  vehiclePicks: number;
   /** Asks the map to show a route's area; a new `request` number is a new ask. */
   routeFocus: { routeId: RouteId; request: number } | null;
   /** How far this browser's clock is ahead of FleetSmart's, so report times can be compared with it. */
@@ -349,15 +351,45 @@ function VehicleLayer({
   selectedCode,
   onSelect,
   animate,
+  vehiclePicks,
   clockAheadMs,
-}: Pick<FleetMapProps, "vehicles" | "selectedCode" | "onSelect" | "clockAheadMs"> & { animate: boolean }) {
+}: Pick<FleetMapProps, "vehicles" | "selectedCode" | "onSelect" | "vehiclePicks" | "clockAheadMs"> & {
+  animate: boolean;
+}) {
   const map = useMap();
   const { drawn, registerMarker, markers, shownHeading } = useLiveMotion(vehicles, animate, clockAheadMs);
   const positionOf = useCallback((v: Vehicle) => drawn.get(v.id) ?? v, [drawn]);
 
-  // Fly to a minibus where it is drawn now when it's selected, then keep it in view as it drives.
+  // Bumped whenever the view changes so the label layout re-runs.
+  const [viewVersion, setViewVersion] = useState(0);
+  // Following a selected minibus lasts until the user moves the map themselves. `ownMove` marks
+  // the moves made by following, so they aren't mistaken for the user's.
+  const following = useRef(false);
+  const ownMove = useRef(false);
+  const handlers = useMemo(() => {
+    const bump = () => setViewVersion((version) => version + 1);
+    return {
+      moveend: () => {
+        ownMove.current = false;
+        bump();
+      },
+      zoomend: bump,
+      resize: bump,
+      dragstart: () => {
+        following.current = false;
+      },
+      zoomstart: () => {
+        if (!ownMove.current) following.current = false;
+      },
+    };
+  }, []);
+  useMapEvents(handlers);
+
+  // Fly to a minibus where it is drawn now when it's picked, then keep it in view as it drives,
+  // until the user moves the map (picking it again follows it again).
   const selectedId = vehicles.find((v) => v.code === selectedCode)?.id;
   const flownTo = useRef<{ id: string; at: number }>(undefined);
+  const handledPicks = useRef(vehiclePicks);
   useEffect(() => {
     const marker = selectedId ? markers.current.get(selectedId) : undefined;
     if (!selectedId || !marker) {
@@ -365,22 +397,24 @@ function VehicleLayer({
       return;
     }
     const position = marker.getLatLng();
-    if (flownTo.current?.id !== selectedId) {
+    const picked = vehiclePicks !== handledPicks.current;
+    if (flownTo.current?.id !== selectedId || picked) {
+      handledPicks.current = vehiclePicks;
       flownTo.current = { id: selectedId, at: Date.now() };
+      following.current = true;
+      ownMove.current = true;
       const zoom = Math.max(map.getZoom(), FOLLOW_ZOOM);
       if (animate) map.flyTo(position, zoom, { duration: 1 });
       else map.setView(position, zoom, { animate: false });
-    } else if (Date.now() - flownTo.current.at > 1500 && !map.getBounds().pad(-0.15).contains(position)) {
+    } else if (
+      following.current &&
+      Date.now() - flownTo.current.at > 1500 &&
+      !map.getBounds().pad(-0.15).contains(position)
+    ) {
+      ownMove.current = true;
       map.panTo(position);
     }
-  }, [map, selectedId, drawn, animate]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Bumped whenever the view changes so the label layout re-runs.
-  const [viewVersion, setViewVersion] = useState(0);
-  const handlers = useMemo(() => {
-    const bump = () => setViewVersion((version) => version + 1);
-    return { moveend: bump, zoomend: bump, resize: bump };
-  }, []);
-  useMapEvents(handlers);
+  }, [map, selectedId, drawn, animate, vehiclePicks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const places = usePlaces();
   const layout = useMemo(() => {
@@ -572,6 +606,7 @@ export default function FleetMap({
   onSelectPlace,
   mode,
   routeFocus,
+  vehiclePicks,
   clockAheadMs,
 }: FleetMapProps) {
   const [map, setMap] = useState<L.Map | null>(null);
@@ -603,6 +638,7 @@ export default function FleetMap({
           selectedCode={selectedCode}
           onSelect={onSelect}
           animate={animate}
+          vehiclePicks={vehiclePicks}
           clockAheadMs={clockAheadMs}
         />
         <MapBehaviour

@@ -48,7 +48,7 @@ export function LiveMapScreen() {
 
   const renderRow = (vehicle: (typeof visibleVehicles)[number]) => (
     <li key={vehicle.id}>
-      <VehicleRow vehicle={vehicle} selected={vehicle.code === selected?.code} onSelect={select} />
+      <VehicleRow vehicle={vehicle} selected={vehicle.code === selected?.code} onSelect={pickVehicle} />
     </li>
   );
 
@@ -78,6 +78,15 @@ export function LiveMapScreen() {
     [pathname, router, searchParams],
   );
   const select = useCallback((code: string | null) => setSelection(code ? { vehicle: code } : null), [setSelection]);
+  // Each pick counts, even of the minibus already selected, so the map follows it again.
+  const [vehiclePicks, setVehiclePicks] = useState(0);
+  const pickVehicle = useCallback(
+    (code: string) => {
+      setVehiclePicks((count) => count + 1);
+      select(code);
+    },
+    [select],
+  );
   const selectPlace = useCallback((id: PlaceId) => setSelection({ place: id }), [setSelection]);
   const clearSelection = useCallback(() => setSelection(null), [setSelection]);
 
@@ -121,7 +130,8 @@ export function LiveMapScreen() {
             <FleetMap
               vehicles={visibleVehicles}
               selectedCode={selected?.code ?? null}
-              onSelect={select}
+              onSelect={pickVehicle}
+              vehiclePicks={vehiclePicks}
               selectedPlaceId={selectedPlace?.id ?? null}
               onSelectPlace={selectPlace}
               mode={mode}
