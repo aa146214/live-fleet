@@ -137,6 +137,11 @@
 }
 
 
+.suggestion {
+  color: var(--color-green);
+  font-size: 13px;
+}
+
 .missing {
   color: #b3261e;
   font-size: 13px;

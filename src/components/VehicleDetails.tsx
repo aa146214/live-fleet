@@ -40,7 +40,7 @@ export function VehicleDetails({ vehicle, onClose }: VehicleDetailsProps) {
         ["Vehicle registration", vehicle.registration],
         ["Next destination", shortDestination(vehicle.nextDestination)],
         ["Vehicle location", vehicle.address],
-        ["Route information", vehicle.stops ? stopSequence(places, routes, vehicle.stops) : "Not assigned to a shuttle route"],
+        ["Route information", vehicle.routeText ?? (vehicle.stops ? stopSequence(places, routes, vehicle.stops) : "Not assigned to a shuttle route")],
         ["Last updated", formatUpdated(vehicle.updatedAt)],
       ]}
     />

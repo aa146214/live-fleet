@@ -59,12 +59,22 @@ drives each minibus along the road it took (`src/lib/road-paths.ts`, `src/lib/mo
 
 `/admin` lists the shuttles and the other vehicles in your FleetSmart account. **Add route** (or
 **Edit route**) opens one screen where you give the vehicle a code and add its stops one by one
-(stations and the studio's North and South entrances), reorder them and save. The shuttle drives
+(the places set up in your FleetSmart account), reorder them and save. The shuttle drives
 the stops in that order and then returns to the first. Changes show on the map within about 30
 seconds.
 
 - A shuttle's route (its colour and group on the map) is chosen in a dropdown, which starts from the first
   station among its stops.
+- Route suggestions: the admin looks at FleetSmart's place events (`poi_events`) for the last 14 days
+  and suggests the route whose station a vehicle keeps visiting (3+ visits to a place within 250 m of
+  the station). It works for any station that exists as a place in the FleetSmart account; today
+  only Watford Junction, the studio (WBSL) and Pinewood Studios do, so St Albans and Rickmansworth
+  need those places adding in FleetSmart first. The lookup takes about a minute the first time
+  (FleetSmart allows one request a second), then is reused for 30 minutes.
+- Stops are the places (Points of Interest) in the FleetSmart account, so to offer another stop, add it
+  as a place in FleetSmart; it shows up in the picker within ten minutes. If the account has no
+  places (or FleetSmart can't be reached) the built-in stations and studio entrances are offered, and
+  shuttles saved with those keep working.
 - The stops drive the map: the route information on the vehicle card, the next destination (the
   next stop along the road), and the road the shuttle follows between reports.
 - Sign in with `ADMIN_USERNAME` and `ADMIN_PASSWORD` from the environment. `SESSION_SECRET`

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useActionState, useState } from "react";
-import { routeIdOfStops, type PlaceId } from "@/lib/routes";
 import { deleteVehicleAction, saveVehicleAction } from "./actions";
 import styles from "./admin.module.css";
 
@@ -19,11 +18,21 @@ interface VehicleEditorProps {
   initialStops: string[];
   /** Whether the vehicle is already a shuttle (editing) rather than being added. */
   existing: boolean;
+  /** The places that can be added as stops. */
   places: PlaceOption[];
+  /** Every place's name, including ones already used but no longer offered. */
+  names: Record<string, string>;
+  /** The route each place belongs to, for the places that are a route's station. */
+  stopRoutes: Record<string, number>;
+  pickerNote: string;
   /** The routes to choose from. */
   routes: { id: number; label: string }[];
   /** The route the vehicle is on now (editing), or null when adding. */
   initialRouteId: number | null;
+  /** The route the vehicle's recent visits point to, if any. */
+  suggestedRouteId: number | null;
+  /** What the recent visits say, for the admin to read. */
+  visitHint: string;
   maxStops: number;
 }
 
@@ -35,25 +44,30 @@ export function VehicleEditor({
   initialStops,
   existing,
   places,
+  names,
+  stopRoutes,
+  pickerNote,
   routes,
   initialRouteId,
+  suggestedRouteId,
+  visitHint,
   maxStops,
 }: VehicleEditorProps) {
   const [state, action, pending] = useActionState(saveVehicleAction, undefined);
   const [code, setCode] = useState(initialCode);
   const [stops, setStops] = useState(initialStops);
-  // Until a route is chosen by hand it follows the first station among the stops.
+  // Until a route is chosen by hand it follows the visits, then the first station among the stops.
   const [chosenRoute, setChosenRoute] = useState<number | null>(initialRouteId);
   const [next, setNext] = useState(places[0]?.id ?? "");
 
-  const nameOf = (id: string) => places.find((place) => place.id === id)?.name ?? id;
+  const nameOf = (id: string) => names[id] ?? places.find((place) => place.id === id)?.name ?? id;
   const move = (from: number, to: number) =>
     setStops((list) => {
       const copy = [...list];
       copy.splice(to, 0, copy.splice(from, 1)[0]);
       return copy;
     });
-  const suggested = routeIdOfStops(stops as PlaceId[]) ?? routes[0]?.id ?? 1;
+  const suggested = suggestedRouteId ?? stops.map((stop) => stopRoutes[stop]).find(Boolean) ?? routes[0]?.id ?? 1;
   const routeId = chosenRoute ?? suggested;
 
   return (
@@ -87,6 +101,7 @@ export function VehicleEditor({
             </option>
           ))}
         </select>
+        {visitHint && <small className={suggestedRouteId ? styles.suggestion : styles.help}>{visitHint}</small>}
       </label>
 
       <div>
@@ -99,7 +114,13 @@ export function VehicleEditor({
               <li key={`${stop}-${i}`} className={styles.stop}>
                 <span className={styles.stopNumber}>{i + 1}</span>
                 <span className={styles.stopName}>{nameOf(stop)}</span>
-                <button type="button" className={styles.icon} onClick={() => move(i, i - 1)} disabled={i === 0} aria-label={`Move ${nameOf(stop)} up`}>
+                <button
+                  type="button"
+                  className={styles.icon}
+                  onClick={() => move(i, i - 1)}
+                  disabled={i === 0}
+                  aria-label={`Move ${nameOf(stop)} up`}
+                >
                   ↑
                 </button>
                 <button
@@ -124,6 +145,8 @@ export function VehicleEditor({
           </ol>
         )}
         <p className={styles.help}>The shuttle returns to the first stop after the last one.</p>
+
+        <p className={styles.help}>{pickerNote}</p>
 
         <div className={styles.addStop}>
           <select value={next} onChange={(event) => setNext(event.target.value)} aria-label="Place to add">

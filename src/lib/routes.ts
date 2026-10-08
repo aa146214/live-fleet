@@ -67,7 +67,11 @@ export const ENTRANCES = [
   { name: "South Entrance", detail: "///goes.forget.lions" },
 ] as const;
 
-export type PlaceId = "studio-north" | "studio-south" | "station-1" | "station-2" | "station-3";
+/**
+ * The built-in places (the studio's two entrances and the three stations), or a place set up in
+ * the FleetSmart account (`poi-` and its id), which can only be a stop, not a map pin.
+ */
+export type PlaceId = "studio-north" | "studio-south" | "station-1" | "station-2" | "station-3" | `poi-${number}`;
 
 /** Map pins: the studio's two entrances and each route's station. Tapping one shows its details. */
 export interface Place extends LatLng {
@@ -112,6 +116,13 @@ export function getRoute(routes: ShuttleRoute[], id: RouteId | null): ShuttleRou
   return routes.find((route) => route.id === id);
 }
 
+/** FleetSmart writes some place names in capitals; "WATFORD JUNCTION" reads better as "Watford Junction". */
+export function tidyPlaceName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length <= 4 || trimmed !== trimmed.toUpperCase()) return trimmed;
+  return trimmed.toLowerCase().replace(/(^|\s)(\p{L})/gu, (_, space, letter) => space + letter.toUpperCase());
+}
+
 /** A vehicle's route: the places it calls at, in order, then back to the first. */
 export function defaultStops(route: ShuttleRoute): PlaceId[] {
   const station = `station-${route.id}` as PlaceId;
@@ -119,13 +130,7 @@ export function defaultStops(route: ShuttleRoute): PlaceId[] {
 }
 
 export function isPlaceId(value: string): value is PlaceId {
-  return value === "studio-north" || value === "studio-south" || /^station-[1-3]$/.test(value);
-}
-
-/** The route a list of stops belongs to: that of the first station in it (null if none). */
-export function routeIdOfStops(stops: readonly PlaceId[]): RouteId | null {
-  const station = stops.find((stop) => stop.startsWith("station-"));
-  return station ? (Number(station.slice("station-".length)) as RouteId) : null;
+  return value === "studio-north" || value === "studio-south" || /^station-[1-3]$/.test(value) || /^poi-\d+$/.test(value);
 }
 
 /** How a stop is written in a route sequence: the station's route name, or the entrance. */

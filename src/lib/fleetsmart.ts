@@ -3,7 +3,17 @@ import { getAssignments, getRoutes, normaliseVrn, type Assignment } from "./conf
 import { distanceMetres, estimateNextDestination } from "./destination";
 import { attachRoads, nearestRoad, streetNear } from "./road-paths";
 import { locateOnLoop, loopIfReady, loopStopsFor, nextStop, roadAhead } from "./route-loops";
-import { STUDIO_LOCATION, defaultStops, getRoute, placesFor, type ShuttleRoute } from "./routes";
+import {
+  STUDIO_LOCATION,
+  defaultStops,
+  getRoute,
+  placesFor,
+  stopSequence,
+  tidyPlaceName,
+  type Place,
+  type PlaceId,
+  type ShuttleRoute,
+} from "./routes";
 import { streetAt } from "./polyline-simulation";
 import type { FleetSnapshot, Vehicle, VehicleStatus } from "./types";
 
@@ -22,12 +32,12 @@ interface ResourceIdentifier {
   id: string;
 }
 
-interface Resource extends ResourceIdentifier {
+export interface Resource extends ResourceIdentifier {
   attributes: Record<string, unknown>;
   relationships?: Record<string, { data?: ResourceIdentifier | null }>;
 }
 
-interface JsonApiDocument {
+export interface JsonApiDocument {
   data: Resource[];
   included?: Resource[];
 }
@@ -40,11 +50,18 @@ export function hasFleetSmartCredentials(): boolean {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function fetchPage(page: number): Promise<JsonApiDocument> {
-  const params = new URLSearchParams({
-    include: "vehicle,vehicle_location",
-    "page[size]": String(PAGE_SIZE),
-    "page[number]": String(page),
-  });
+  return fleetSmartGet(
+    "/live_views",
+    new URLSearchParams({
+      include: "vehicle,vehicle_location",
+      "page[size]": String(PAGE_SIZE),
+      "page[number]": String(page),
+    }),
+  );
+}
+
+/** One request to the FleetSmart API (it allows one per second per client). */
+export async function fleetSmartGet(path: string, params: URLSearchParams): Promise<JsonApiDocument> {
   const headers: Record<string, string> = {
     "X-API-KEY": process.env.FLEETSMART_API_KEY ?? "",
     "Content-Type": "application/vnd.api+json",
@@ -52,7 +69,7 @@ async function fetchPage(page: number): Promise<JsonApiDocument> {
   };
   if (process.env.FLEETSMART_CLIENT_ID) headers["X-CLIENT-ID"] = process.env.FLEETSMART_CLIENT_ID;
 
-  const response = await fetch(`${BASE_URL}/live_views?${params}`, { headers, cache: "no-store" });
+  const response = await fetch(`${BASE_URL}${path}?${params}`, { headers, cache: "no-store" });
   if (!response.ok) {
     throw new Error(`FleetSmart responded ${response.status} ${response.statusText}`);
   }
@@ -171,11 +188,68 @@ async function fetchLiveVehicles(routes: ShuttleRoute[]): Promise<Vehicle[]> {
   const documents = await fetchAllPages();
   const vehicles = toVehicles(documents, await getAssignments(), routes);
   await attachRoads(vehicles, ROAD_LOOKUP_WAIT_MS);
-  applyRouterDetails(vehicles, routes);
+  const places = await knownPlaces(routes);
+  for (const vehicle of vehicles) {
+    if (vehicle.stops) vehicle.routeText = stopSequence(places, routes, vehicle.stops);
+  }
+  applyRouterDetails(vehicles, routes, places);
   return vehicles;
 }
 
 
+
+/** A place set up in the FleetSmart account (its Points of Interest). */
+export interface FleetPlace {
+  /** `poi-` and FleetSmart's id. */
+  id: PlaceId;
+  /** The name, tidied (FleetSmart often has capitals). */
+  name: string;
+  lat: number;
+  lng: number;
+}
+
+let placesCache: { at: number; places: FleetPlace[] } | undefined;
+const PLACES_CACHE_MS = 10 * 60_000;
+
+/** The places in the FleetSmart account, or none if it can't be reached. Cached for ten minutes. */
+export async function listFleetPlaces(): Promise<FleetPlace[]> {
+  if (!hasFleetSmartCredentials()) return [];
+  if (placesCache && Date.now() - placesCache.at < PLACES_CACHE_MS) return placesCache.places;
+  try {
+    const places: FleetPlace[] = [];
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      if (page > 1) await sleep(RATE_LIMIT_GAP_MS);
+      const doc = await fleetSmartGet(
+        "/pois",
+        new URLSearchParams({ "page[size]": String(PAGE_SIZE), "page[number]": String(page) }),
+      );
+      for (const poi of doc.data) {
+        const lat = asNumber(poi.attributes.lat);
+        const lng = asNumber(poi.attributes.lng);
+        const name = tidyPlaceName(asString(poi.attributes.name));
+        if (lat !== null && lng !== null && name) places.push({ id: `poi-${poi.id}` as PlaceId, name, lat, lng });
+      }
+      if (doc.data.length < PAGE_SIZE) break;
+    }
+    placesCache = { at: Date.now(), places };
+    return places;
+  } catch (error) {
+    console.error("[fleetsmart] places:", error instanceof Error ? error.message : error);
+    return placesCache?.places ?? [];
+  }
+}
+
+/** Every place a stop can be: the built-in ones, and those set up in the FleetSmart account. */
+export async function knownPlaces(routes: ShuttleRoute[]): Promise<Place[]> {
+  const fleetPlaces: Place[] = (await listFleetPlaces()).map(({ id, name, lat, lng }) => ({
+    id,
+    name,
+    lat,
+    lng,
+    routeId: null,
+  }));
+  return [...placesFor(routes), ...fleetPlaces];
+}
 
 /** A vehicle in the FleetSmart account, shuttle or not (the admin picks the shuttles from these). */
 export interface FleetVehicle {
@@ -235,8 +309,7 @@ const MPH_TO_MPS = 0.44704;
  * in, the heading-based guess and "Address unavailable" stand; the next snapshot has
  * the better answer.
  */
-function applyRouterDetails(vehicles: Vehicle[], routes: ShuttleRoute[]): void {
-  const places = placesFor(routes);
+function applyRouterDetails(vehicles: Vehicle[], routes: ShuttleRoute[], places: Place[]): void {
   for (const vehicle of vehicles) {
     const route = getRoute(routes, vehicle.routeId);
     const stopIds = vehicle.stops ?? (route ? defaultStops(route) : undefined);

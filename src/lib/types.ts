@@ -18,6 +18,8 @@ export interface Vehicle {
   /** When the tracker took this position. */
   updatedAt: string | null;
   nextDestination: string;
+  /** The stops written out, e.g. "Watford Junction → WBSL → Watford Junction". */
+  routeText?: string;
   /** The places this shuttle calls at, in order (place ids, see routes.ts); absent for non-shuttles. */
   stops?: string[];
   /**
