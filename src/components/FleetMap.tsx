@@ -37,9 +37,9 @@ const MOBILE_BUS_SCALE = 0.42;
 
 /** Gap between a bus and its label. */
 const LABEL_GAP = 4;
-/** Label tag size: 11px bold code beside a 14px bus icon. */
+/** Label tag size: 11px bold code beside a 16px bus icon. */
 const LABEL_HEIGHT = 26;
-const labelWidth = (code: string) => Math.round(36 + code.length * 7.5);
+const labelWidth = (code: string) => Math.round(38 + code.length * 7.5);
 
 /** How often the label layout and stale fading catch up with the moving markers. */
 const LAYOUT_INTERVAL_MS = 1000;
@@ -133,7 +133,7 @@ function busIcon(
           ${busSvg(color, heading !== null)}
         </span>
         <span class="${styles.label} ${animateLabel ? styles.labelIn : ""}" style="${placementStyle(placement)}">
-          <img src="/icons/bus-marker.svg" width="14" height="17" alt="">
+          <img src="/icons/bus-card.svg" width="16" height="16" alt="">
           <span>${escapeHtml(code)}</span>
         </span>
       </span>`,
