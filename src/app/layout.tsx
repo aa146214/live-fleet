@@ -9,7 +9,7 @@ const arimo = Arimo({
 });
 
 export const metadata: Metadata = {
-  title: "Leavesden Shuttle · Live map",
+  title: "Warner Bros. Leavesden Shuttle Map",
   description: "Live positions of the Warner Bros. Studios Leavesden shuttle minibuses.",
 };
 

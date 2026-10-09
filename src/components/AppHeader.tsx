@@ -15,8 +15,8 @@ export function AppHeader({ routeCounts, onSelectRoute }: AppHeaderProps) {
   return (
     <header className={styles.header}>
       <div className={styles.brand}>
-        <Image src="/brand/wb-logo.svg" alt="Warner Bros." width={46} height={47} priority />
-        <h1 className={styles.title}>Warner Bros. Studios Leavesden Shuttle Live Map</h1>
+        <Image src="/brand/wb-logo.png" alt="Warner Bros. Leavesden Shuttle Map" width={60} height={60} priority />
+        <h1 className={styles.title}>Warner Bros. Leavesden Shuttle Map</h1>
       </div>
 
       {/* Route key with live minibus counts (Figma "Route filters"); picking one shows its area
