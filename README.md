@@ -85,8 +85,8 @@ seconds.
   upgraded) the first time the admin or map reads them. Without `DATABASE_URL` the app falls back to
   `src/config/vehicle-assignments.ts` (each vehicle gets its route's usual stops) and the admin page
   says nothing can be saved.
-- Minibuses near the studio that aren't shuttles yet are shown on the map too, labelled by
-  registration and without a route, so you can spot the ones to add.
+- The map shows only the vehicles set up here as shuttles (each with a route). Until one is set up,
+  the map is empty.
 - The three routes' names and stations are in `src/lib/routes.ts` (and the `routes` table, which
   the admin doesn't edit).
 
@@ -102,8 +102,7 @@ export const VEHICLE_ASSIGNMENTS = {
 };
 ```
 
-Minibuses within 20 km of the studio that aren't listed are shown too, labelled by registration
-and without a route.
+Only the vehicles listed there are shown on the map.
 
 FleetSmart has no timetable data, so "Next destination" is estimated from the direction of
 travel (towards the studio or towards the route's station).

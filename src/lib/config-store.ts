@@ -71,7 +71,7 @@ export async function getRoutes(): Promise<ShuttleRoute[]> {
   }
 }
 
-/** The shuttles, or none (meaning "show minibuses near the studio") if nothing is set up. */
+/** The shuttles set up in the admin, which are the vehicles shown on the map. */
 export async function getAssignments(): Promise<Map<string, Assignment>> {
   const list = await listAssignments();
   return new Map(list.map((assignment) => [assignment.vrn, assignment]));

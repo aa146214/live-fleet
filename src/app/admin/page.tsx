@@ -67,8 +67,7 @@ async function Vehicles() {
         <h2 className={styles.cardTitle}>Shuttles</h2>
         {assignments.length === 0 ? (
           <p className={styles.help}>
-            No shuttles yet. The map shows the minibuses near the studio, labelled by registration; add a route to one
-            below to make it a shuttle.
+            No shuttles yet, so the map is empty. Add a route to a vehicle below to put it on the map.
           </p>
         ) : (
           <ul className={styles.list}>

@@ -1,4 +1,3 @@
-import { SHUTTLE_SEARCH_RADIUS_KM } from "@/config/vehicle-assignments";
 import { getAssignments, getRoutes, normaliseVrn, type Assignment } from "./config-store";
 import { distanceMetres, estimateNextDestination } from "./destination";
 import { attachRoads, nearestRoad, streetNear } from "./road-paths";
@@ -104,14 +103,6 @@ function toStatus(value: string): VehicleStatus {
   return "unknown";
 }
 
-/** Minibuses near the studio that aren't shuttles yet are shown too, without a route. */
-function isNearbyMinibus(icon: string, lat: number, lng: number): boolean {
-  return (
-    icon.includes("bus") &&
-    distanceMetres(STUDIO_LOCATION, { lat, lng }) <= SHUTTLE_SEARCH_RADIUS_KM * 1000
-  );
-}
-
 function toVehicles(
   documents: JsonApiDocument[],
   assignments: Map<string, Assignment>,
@@ -136,8 +127,8 @@ function toVehicles(
 
     const registration = asString(vehicle.attributes.vrn);
     const assignment = assignments.get(normaliseVrn(registration));
-    // Shuttles are always shown; so are the other minibuses near the studio, without a route.
-    if (!assignment && !isNearbyMinibus(asString(vehicle.attributes.icon), lat, lng)) continue;
+    // Only the vehicles set up as shuttles (in the admin) are shown.
+    if (!assignment) continue;
     const code = assignment?.code ?? normaliseVrn(registration);
     const routeId = assignment?.routeId ?? null;
     const status = toStatus(asString(liveView.attributes.status));

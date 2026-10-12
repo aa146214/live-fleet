@@ -147,7 +147,7 @@ export function LiveMapScreen() {
               {!snapshot ? (
                 <p className={styles.empty}>{error ? "Could not load vehicles." : "Loading vehicles…"}</p>
               ) : visibleVehicles.length === 0 ? (
-                <p className={styles.empty}>No minibuses are reporting a position right now.</p>
+                <p className={styles.empty}>No shuttles are set up, or none is reporting a position right now.</p>
               ) : (
                 <>
                   <div id="vehicle-list" className={styles.list}>
