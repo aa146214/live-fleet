@@ -1,7 +1,7 @@
 import { getAssignments, getRoutes, normaliseVrn, type Assignment } from "./config-store";
 import { distanceMetres, estimateNextDestination } from "./destination";
 import { attachRoads, nearestRoad, streetNear } from "./road-paths";
-import { locateOnLoop, loopIfReady, loopStopsFor, nextStop, roadAhead } from "./route-loops";
+import { locateOnLoop, loopIfReady, loopStopsFor, nextStop, PREDICT_BETWEEN_REPORTS, roadAhead } from "./route-loops";
 import {
   STUDIO_LOCATION,
   defaultStops,
@@ -289,6 +289,8 @@ export async function listFleetVehicles(): Promise<FleetVehicle[]> {
 
 /** A moving minibus within this of a road is drawn on it. */
 const SNAP_TO_ROAD_M = 60;
+/** A stopped one is only moved onto a road this close, since it may really be parked off the road. */
+const SNAP_PARKED_TO_ROAD_M = 15;
 const MPH_TO_MPS = 0.44704;
 
 /**
@@ -316,7 +318,15 @@ function applyRouterDetails(vehicles: Vehicle[], routes: ShuttleRoute[], places:
       if (street) vehicle.address = street;
     }
 
-    if (!moving) continue;
+    if (!moving) {
+      // Parked: onto the nearest road if one is right beside it, so it isn't drawn in a building.
+      const near = nearestRoad(vehicle)?.point;
+      if (near && distanceMetres(near, vehicle) <= SNAP_PARKED_TO_ROAD_M) {
+        vehicle.lat = near.lat;
+        vehicle.lng = near.lng;
+      }
+      continue;
+    }
     const roadEnd = vehicle.road?.points[vehicle.road.points.length - 1];
     const onRoute = here && here.distance <= SNAP_TO_ROAD_M ? here : null;
     const snapped =
@@ -328,7 +338,7 @@ function applyRouterDetails(vehicles: Vehicle[], routes: ShuttleRoute[], places:
       vehicle.lng = snapped.lng;
     }
 
-    if (loop && onRoute) {
+    if (PREDICT_BETWEEN_REPORTS && loop && onRoute) {
       vehicle.ahead = roadAhead(loop, onRoute.along, (vehicle.speedMph ?? 0) * MPH_TO_MPS);
     }
   }

@@ -36,8 +36,11 @@ export const MIN_DRIVE_MS = 4000;
 export const MAX_DRIVE_MS = 90_000;
 /** Reports further apart than this are a data gap: snap rather than drive. */
 const MAX_REPORT_GAP_MS = 5 * 60_000;
-/** Straight-line moves longer than this (no road known) are bad data: snap. */
-const SNAP_DISTANCE_M = 1500;
+/**
+ * With no road known, only a short hop is drawn as a straight line. Further, a straight line
+ * would cut across blocks and buildings, so the marker jumps to the report instead.
+ */
+const SNAP_DISTANCE_M = 60;
 /** A moving minibus that hasn't reported for this long is shown as stale. */
 export const STALE_AFTER_MS = 150_000;
 

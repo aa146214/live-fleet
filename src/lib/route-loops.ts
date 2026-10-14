@@ -162,6 +162,15 @@ export function locateOnLoop(loop: Loop, position: LatLng, heading: number | nul
   return { along: best.along, point: best.point, distance: best.distance };
 }
 
+/**
+ * Whether a minibus is predicted along its route between reports. Off: a driver often takes a
+ * different road from the router's route, and a marker predicted along the route then sits on
+ * the wrong road (replaying MA25AZC's day put it up to 400 m off the road it drove) until the
+ * next report. Without prediction the marker follows the road actually driven, about one report
+ * behind.
+ */
+export const PREDICT_BETWEEN_REPORTS = false;
+
 /** How much road is sent ahead of a moving minibus, in seconds of driving (more than a prediction lasts). */
 const AHEAD_SECONDS = 120;
 const MIN_AHEAD_M = 300;

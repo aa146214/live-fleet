@@ -33,6 +33,8 @@ const DISTANCE_SLACK_M = 100;
 const MPH_TO_MPS = 0.44704;
 /** How far the router may move a report onto a road. */
 const SNAP_RADIUS_M = 50;
+/** The same, on the second try for a road that the first found nothing for. */
+const LOOSE_SNAP_RADIUS_M = 80;
 /** How closely the road at each end must match the minibus's heading. */
 const HEADING_TOLERANCE = 60;
 
@@ -84,19 +86,42 @@ function decodePolyline6(encoded: string): LatLng[] {
   return points;
 }
 
-const location = (report: Report) => ({
+/** How the road between two reports is asked for. */
+interface RoadQuery {
+  /** Start and finish facing the way the minibus was heading. */
+  heading: boolean;
+  radius: number;
+}
+/** The usual question, then a looser one for places where the first finds no road (private roads, car parks). */
+const ROAD_QUERIES: RoadQuery[] = [
+  { heading: true, radius: SNAP_RADIUS_M },
+  { heading: false, radius: LOOSE_SNAP_RADIUS_M },
+];
+
+const location = (report: Report, query: RoadQuery) => ({
   lat: report.lat,
   lon: report.lng,
-  radius: SNAP_RADIUS_M,
+  radius: query.radius,
   // Start and finish facing the way the minibus was heading, so the route doesn't
   // begin with a U-turn or use the wrong side of a dual carriageway.
-  ...(report.heading !== null ? { heading: Math.round(report.heading), heading_tolerance: HEADING_TOLERANCE } : {}),
+  ...(query.heading && report.heading !== null
+    ? { heading: Math.round(report.heading), heading_tolerance: HEADING_TOLERANCE }
+    : {}),
 });
 
+/** The road between two reports. A straight line across the blocks is the last resort, so ask twice. */
 async function fetchRoad(from: Report, to: Report): Promise<LatLng[] | null> {
+  for (const query of ROAD_QUERIES) {
+    const road = await fetchRoadWith(from, to, query);
+    if (road) return road;
+  }
+  return null;
+}
+
+async function fetchRoadWith(from: Report, to: Report, query: RoadQuery): Promise<LatLng[] | null> {
   await routerTurn();
   const request = {
-    locations: [location(from), location(to)],
+    locations: [location(from, query), location(to, query)],
     costing: "bus",
     directions_type: "none",
     units: "kilometers",

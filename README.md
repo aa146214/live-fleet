@@ -40,13 +40,15 @@ drives each minibus along the road it took (`src/lib/road-paths.ts`, `src/lib/mo
   one report (roughly a minute) behind the minibus.
 - A moving minibus within 60 m of a road is drawn on it (the road the router found, or the
   route, or the nearest road); parked ones stay where they are reported.
-- A minibus assigned to a route is also followed between reports: the server sends the route's
-  road ahead of it, and the map predicts its position along that road from the report's speed and
-  age (for up to 90 seconds), gliding onto each new report instead of jumping, and waiting if it
-  was ahead rather than going backwards. Minibuses with no route assigned aren't predicted: a
-  guess would leave the road at the first bend, so they stay about one report behind.
-- If no road is found (router down, odd data), that stretch is a straight line; gaps over
-  5 minutes or 1.5 km (500 m when following) snap.
+- Between reports the marker is not predicted forward: a driver often takes a different road from
+  the router's route, and a predicted marker then sits on the wrong road until the next report
+  (replaying one shuttle's day, it was up to 400 m off). So it follows the road actually driven,
+  about one report behind. The prediction code is kept behind `PREDICT_BETWEEN_REPORTS` in
+  `src/lib/route-loops.ts`.
+- If the router finds no road (it is asked twice, the second time with a looser search), a hop of
+  under 60 m is drawn as a straight line and a longer one jumps, rather than cutting across blocks
+  and buildings. Gaps over 5 minutes also jump.
+- A stopped minibus within 15 m of a road is drawn on that road, so it isn't left inside a building.
 - A moving minibus that hasn't reported for 2.5 minutes is faded.
 - Report times are the tracker's own (`date_time`). The server sends FleetSmart's current time
   with each response so a viewer's clock being off doesn't skew the timing.

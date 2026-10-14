@@ -1,5 +1,5 @@
 import { slicePolyline, positionAtDistance, streetAt } from "./polyline-simulation";
-import { loopStopsFor, loopWithin, nextStop, roadAhead } from "./route-loops";
+import { loopStopsFor, loopWithin, nextStop, PREDICT_BETWEEN_REPORTS, roadAhead } from "./route-loops";
 import { getRoutes } from "./config-store";
 import { defaultStops, getRoute, placesFor, STUDIO_DESTINATION } from "./routes";
 import type { FleetSnapshot, Vehicle } from "./types";
@@ -140,7 +140,7 @@ export async function demoSnapshot(now = new Date()): Promise<FleetSnapshot> {
         stops: stopIds,
         updatedAt,
         road: { since: previousAt, points: road },
-        ahead: roadAhead(loop, to, speed),
+        ahead: PREDICT_BETWEEN_REPORTS ? roadAhead(loop, to, speed) : undefined,
       };
     }),
   );
