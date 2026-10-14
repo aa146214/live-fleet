@@ -35,6 +35,9 @@ drives each minibus along the road it took (`src/lib/road-paths.ts`, `src/lib/mo
 - When a new report arrives, the server looks up the road from the previous report with
   Valhalla's **bus** routing, which allows bus-only roads that car routers detour around.
   Routes longer than the minibus could have driven at its reported speeds are rejected.
+  The heading is only passed to the router for a report where the minibus was moving (a stopped
+  tracker keeps an old heading, which sent the road round the block), and a road much longer than
+  the same hop without the headings is replaced by the shorter one.
 - The marker then drives from where it is to the new report along that road, taking as long as
   the minibus did, and turns to follow it. It moves continuously and stays on the road, about
   one report (roughly a minute) behind the minibus.

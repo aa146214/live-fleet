@@ -22,7 +22,10 @@ const MIN_MOVE_M = 25;
 const MAX_GAP_MS = 5 * 60_000;
 /** A route this much longer than the straight line is probably a wrong guess (e.g. a U-turn). */
 const MAX_DETOUR = 3;
-const MAX_DETOUR_EXTRA_M = 300;
+const MAX_DETOUR_EXTRA_M = 100;
+/** Shorter than this, a hop is a straight line on the map too (see SNAP_DISTANCE_M in motion.ts). */
+const SHORT_HOP_M = 60;
+const SHORT_HOP_EXTRA_M = 30;
 /**
  * A route longer than the minibus could have driven is wrong: allow its faster
  * reported speed (at least MIN_ALLOWED_SPEED_MPH) times this margin, plus a little.
@@ -102,18 +105,37 @@ const location = (report: Report, query: RoadQuery) => ({
   lat: report.lat,
   lon: report.lng,
   radius: query.radius,
-  // Start and finish facing the way the minibus was heading, so the route doesn't
-  // begin with a U-turn or use the wrong side of a dual carriageway.
-  ...(query.heading && report.heading !== null
+  // Start and finish facing the way the minibus was heading, so the route doesn't begin with a
+  // U-turn or use the wrong side of a dual carriageway. Only while it was moving: a stopped
+  // tracker keeps an old heading, and making the road end facing that way sends the route round
+  // the block (a bus that had stopped at a junction was drawn spinning round and back).
+  ...(query.heading && report.heading !== null && (report.speedMph ?? 0) > 0
     ? { heading: Math.round(report.heading), heading_tolerance: HEADING_TOLERANCE }
     : {}),
 });
 
-/** The road between two reports. A straight line across the blocks is the last resort, so ask twice. */
+const lengthOf = (points: LatLng[]) => points.slice(1).reduce((sum, point, i) => sum + distanceMetres(points[i], point), 0);
+
+/** A road this much longer than the straight line is checked against one found without the heading hints. */
+const SUSPICIOUS_RATIO = 1.5;
+const SUSPICIOUS_EXTRA_M = 30;
+
+/**
+ * The road between two reports. A straight line across the blocks is the last resort, so ask
+ * again (looser) when nothing is found. When the road is much longer than the straight line, it
+ * is checked against the road without the heading hints, and the shorter one wins if the hints
+ * are what made it long.
+ */
 async function fetchRoad(from: Report, to: Report): Promise<LatLng[] | null> {
   for (const query of ROAD_QUERIES) {
     const road = await fetchRoadWith(from, to, query);
-    if (road) return road;
+    if (!road) continue;
+    const hinted = query.heading && (from.heading !== null || to.heading !== null);
+    if (hinted && lengthOf(road) > distanceMetres(from, to) * SUSPICIOUS_RATIO + SUSPICIOUS_EXTRA_M) {
+      const plain = await fetchRoadWith(from, to, { heading: false, radius: query.radius });
+      if (plain && lengthOf(road) > lengthOf(plain) * SUSPICIOUS_RATIO + SUSPICIOUS_EXTRA_M) return plain;
+    }
+    return road;
   }
   return null;
 }
@@ -140,6 +162,9 @@ async function fetchRoadWith(from: Report, to: Report, query: RoadQuery): Promis
     const straight = distanceMetres(from, to);
     const seconds = (Date.parse(to.at) - Date.parse(from.at)) / 1000;
     if (!(distance > 0) || distance > straight * MAX_DETOUR + MAX_DETOUR_EXTRA_M) return null;
+    // A hop this short is drawn as a straight line anyway; a road that loops round a block
+    // for it (one-way streets, turn rules) would look like the minibus spinning round.
+    if (straight < SHORT_HOP_M && distance > straight * 2 + SHORT_HOP_EXTRA_M) return null;
     const speedMph = Math.max(from.speedMph ?? 0, to.speedMph ?? 0, MIN_ALLOWED_SPEED_MPH);
     if (distance > speedMph * MPH_TO_MPS * SPEED_MARGIN * seconds + DISTANCE_SLACK_M) return null;
 
