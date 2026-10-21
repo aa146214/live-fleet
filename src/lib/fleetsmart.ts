@@ -46,7 +46,18 @@ export function hasFleetSmartCredentials(): boolean {
   return Boolean(process.env.FLEETSMART_API_KEY);
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+let fleetSmartSlot = Promise.resolve();
+/**
+ * Waits for this server's next turn with FleetSmart, which allows one request a second.
+ * Every request goes through here, so lookups running side by side don't get refused.
+ */
+function fleetSmartTurn(): Promise<void> {
+  const mine = fleetSmartSlot;
+  fleetSmartSlot = mine.then(() => sleep(RATE_LIMIT_GAP_MS));
+  return mine;
+}
 
 async function fetchPage(page: number): Promise<JsonApiDocument> {
   return fleetSmartGet(
@@ -59,8 +70,9 @@ async function fetchPage(page: number): Promise<JsonApiDocument> {
   );
 }
 
-/** One request to the FleetSmart API (it allows one per second per client). */
+/** One request to the FleetSmart API, in turn (it allows one per second per client). */
 export async function fleetSmartGet(path: string, params: URLSearchParams): Promise<JsonApiDocument> {
+  await fleetSmartTurn();
   const headers: Record<string, string> = {
     "X-API-KEY": process.env.FLEETSMART_API_KEY ?? "",
     "Content-Type": "application/vnd.api+json",
@@ -167,7 +179,6 @@ function toVehicles(
 async function fetchAllPages(): Promise<JsonApiDocument[]> {
   const documents: JsonApiDocument[] = [];
   for (let page = 1; page <= MAX_PAGES; page++) {
-    if (page > 1) await sleep(RATE_LIMIT_GAP_MS);
     const doc = await fetchPage(page);
     documents.push(doc);
     if (doc.data.length < PAGE_SIZE) break;
@@ -175,16 +186,60 @@ async function fetchAllPages(): Promise<JsonApiDocument[]> {
   return documents;
 }
 
-async function fetchLiveVehicles(routes: ShuttleRoute[]): Promise<Vehicle[]> {
+/** FleetSmart's vehicle id for each registration seen, so later requests can ask for just the shuttles. */
+const vehicleIds = new Map<string, string>();
+
+function rememberVehicleIds(documents: JsonApiDocument[]): void {
+  for (const doc of documents) {
+    for (const resource of doc.included ?? []) {
+      const vrn = resource.type === "vehicles" ? asString(resource.attributes.vrn) : "";
+      if (vrn) vehicleIds.set(normaliseVrn(vrn), resource.id);
+    }
+  }
+}
+
+/**
+ * The live views of the shuttles. Asking for just them is about three times faster
+ * than for the whole fleet (0.6 s against 2 s), but needs their vehicle ids, which
+ * FleetSmart gives only with the whole fleet (it can't filter by registration). So a
+ * freshly started server fetches the whole fleet once, at the same time as reading the
+ * shuttles from the database, and asks for just the shuttles from then on.
+ */
+async function fetchShuttleViews(assignments: Promise<Map<string, Assignment>>): Promise<JsonApiDocument[]> {
+  if (vehicleIds.size > 0) {
+    const ids = [...(await assignments).keys()].map((vrn) => vehicleIds.get(vrn));
+    if (ids.length === 0) return [];
+    if (ids.every(Boolean)) {
+      const params = new URLSearchParams({
+        include: "vehicle,vehicle_location",
+        "filter[vehicle_id]": ids.join(","),
+        "page[size]": String(PAGE_SIZE),
+      });
+      return [await fleetSmartGet("/live_views", params)];
+    }
+  }
+  // A new shuttle (or a new server): fetch the whole fleet to learn the ids.
   const documents = await fetchAllPages();
-  const vehicles = toVehicles(documents, await getAssignments(), routes);
+  rememberVehicleIds(documents);
+  return documents;
+}
+
+/** Reads the routes, the shuttles and their live positions side by side, rather than one after another. */
+async function fetchLiveVehicles(): Promise<{ routes: ShuttleRoute[]; vehicles: Vehicle[] }> {
+  const assignmentsRead = getAssignments();
+  const views = fetchShuttleViews(assignmentsRead);
+  // Started after the live views so it takes FleetSmart's next turn, not the first.
+  const fleetPlaces = listFleetPlaces();
+  const [routes, assignments, documents] = await Promise.all([getRoutes(), assignmentsRead, views]);
+
+  const vehicles = toVehicles(documents, assignments, routes);
   await attachRoads(vehicles, ROAD_LOOKUP_WAIT_MS);
-  const places = await knownPlaces(routes);
+  const places = withFleetPlaces(routes, await fleetPlaces);
   for (const vehicle of vehicles) {
     if (vehicle.stops) vehicle.routeText = stopSequence(places, routes, vehicle.stops);
   }
   applyRouterDetails(vehicles, routes, places);
-  return vehicles;
+  return { routes, vehicles };
 }
 
 
@@ -200,16 +255,26 @@ export interface FleetPlace {
 }
 
 let placesCache: { at: number; places: FleetPlace[] } | undefined;
+let placesLoading: Promise<FleetPlace[]> | undefined;
 const PLACES_CACHE_MS = 10 * 60_000;
 
-/** The places in the FleetSmart account, or none if it can't be reached. Cached for ten minutes. */
+/**
+ * The places in the FleetSmart account, or none if it can't be reached. Refreshed every
+ * ten minutes; while a refresh is under way the previous list is returned straight away.
+ */
 export async function listFleetPlaces(): Promise<FleetPlace[]> {
   if (!hasFleetSmartCredentials()) return [];
   if (placesCache && Date.now() - placesCache.at < PLACES_CACHE_MS) return placesCache.places;
+  placesLoading ??= loadFleetPlaces().finally(() => {
+    placesLoading = undefined;
+  });
+  return placesCache ? placesCache.places : placesLoading;
+}
+
+async function loadFleetPlaces(): Promise<FleetPlace[]> {
   try {
     const places: FleetPlace[] = [];
     for (let page = 1; page <= MAX_PAGES; page++) {
-      if (page > 1) await sleep(RATE_LIMIT_GAP_MS);
       const doc = await fleetSmartGet(
         "/pois",
         new URLSearchParams({ "page[size]": String(PAGE_SIZE), "page[number]": String(page) }),
@@ -232,14 +297,14 @@ export async function listFleetPlaces(): Promise<FleetPlace[]> {
 
 /** Every place a stop can be: the built-in ones, and those set up in the FleetSmart account. */
 export async function knownPlaces(routes: ShuttleRoute[]): Promise<Place[]> {
-  const fleetPlaces: Place[] = (await listFleetPlaces()).map(({ id, name, lat, lng }) => ({
-    id,
-    name,
-    lat,
-    lng,
-    routeId: null,
-  }));
-  return [...placesFor(routes), ...fleetPlaces];
+  return withFleetPlaces(routes, await listFleetPlaces());
+}
+
+function withFleetPlaces(routes: ShuttleRoute[], fleetPlaces: FleetPlace[]): Place[] {
+  return [
+    ...placesFor(routes),
+    ...fleetPlaces.map(({ id, name, lat, lng }): Place => ({ id, name, lat, lng, routeId: null })),
+  ];
 }
 
 /** A vehicle in the FleetSmart account, shuttle or not (the admin picks the shuttles from these). */
@@ -355,8 +420,7 @@ export async function getLiveSnapshot(): Promise<FleetSnapshot> {
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.snapshot;
   if (inFlight) return inFlight;
 
-  inFlight = getRoutes()
-    .then(async (routes) => ({ routes, vehicles: await fetchLiveVehicles(routes) }))
+  inFlight = fetchLiveVehicles()
     .then(({ routes, vehicles }) => {
       const snapshot: FleetSnapshot = { mode: "live", routes, vehicles, fetchedAt: new Date().toISOString() };
       cached = { at: Date.now(), snapshot };

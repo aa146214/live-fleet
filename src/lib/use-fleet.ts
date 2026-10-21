@@ -8,6 +8,21 @@ export const POLL_INTERVAL_MS = 15_000;
 /** Clock readings kept for working out this browser's clock offset. */
 const CLOCK_SAMPLES = 10;
 
+/** How long the map waits for the vehicles streamed in with the page before asking for them itself. */
+const SEED_WAIT_MS = 8000;
+/** Vehicles streamed in longer ago than this (an earlier visit to the page) are not used. */
+const SEED_MAX_AGE_MS = 10_000;
+
+/** The vehicles streamed in with the page (null if the server couldn't get them), and when. */
+let seed: { snapshot: FleetSnapshot | null; at: number } | undefined;
+const seedListeners = new Set<() => void>();
+
+/** Called by FleetSeed when the page's vehicles arrive. */
+export function seedFleet(snapshot: FleetSnapshot | null): void {
+  seed = { snapshot, at: Date.now() };
+  for (const listener of [...seedListeners]) listener();
+}
+
 interface FleetState {
   snapshot: FleetSnapshot | null;
   error: string | null;
@@ -15,7 +30,10 @@ interface FleetState {
   clockAheadMs: number;
 }
 
-/** Polls /api/vehicles while the tab is visible. */
+/**
+ * The vehicles: first those streamed in with the page, then polled from /api/vehicles
+ * while the tab is visible.
+ */
 export function useFleet(): FleetState {
   const [state, setState] = useState<FleetState>({ snapshot: null, error: null, clockAheadMs: 0 });
 
@@ -25,6 +43,24 @@ export function useFleet(): FleetState {
     // Each reading also includes the response's travel time, so the smallest is the closest.
     const clockReadings: number[] = [];
 
+    function receive(snapshot: FleetSnapshot, readClock: boolean) {
+      if (readClock && snapshot.serverTime) {
+        clockReadings.push(Date.now() - Date.parse(snapshot.serverTime));
+        if (clockReadings.length > CLOCK_SAMPLES) clockReadings.shift();
+      }
+      setState({
+        snapshot,
+        error: snapshot.error ?? null,
+        clockAheadMs: clockReadings.length ? Math.min(...clockReadings) : 0,
+      });
+    }
+
+    function scheduleRefresh() {
+      if (!cancelled && document.visibilityState === "visible") {
+        timer = setTimeout(refresh, POLL_INTERVAL_MS);
+      }
+    }
+
     async function refresh() {
       clearTimeout(timer);
       try {
@@ -32,24 +68,40 @@ export function useFleet(): FleetState {
         const body = await response.json();
         if (cancelled) return;
         if (!response.ok) throw new Error(body.error ?? `Request failed (${response.status})`);
-        const snapshot = body as FleetSnapshot;
-        if (snapshot.serverTime) {
-          clockReadings.push(Date.now() - Date.parse(snapshot.serverTime));
-          if (clockReadings.length > CLOCK_SAMPLES) clockReadings.shift();
-        }
-        setState({
-          snapshot,
-          error: snapshot.error ?? null,
-          clockAheadMs: clockReadings.length ? Math.min(...clockReadings) : 0,
-        });
+        receive(body as FleetSnapshot, true);
       } catch (error) {
         if (cancelled) return;
         const message = error instanceof Error ? error.message : "Could not load vehicles";
         setState((previous) => ({ ...previous, error: message }));
       }
-      if (!cancelled && document.visibilityState === "visible") {
-        timer = setTimeout(refresh, POLL_INTERVAL_MS);
+      scheduleRefresh();
+    }
+
+    /** Uses the page's vehicles if they have arrived; false if not (yet). */
+    function takeSeed(): boolean {
+      if (!seed || Date.now() - seed.at > SEED_MAX_AGE_MS) return false;
+      if (seed.snapshot) {
+        // Not a clock reading: it may have waited a while in the page before this ran.
+        receive(seed.snapshot, false);
+        scheduleRefresh();
+      } else {
+        refresh();
       }
+      return true;
+    }
+
+    function onSeed() {
+      seedListeners.delete(onSeed);
+      clearTimeout(timer);
+      if (!cancelled && !takeSeed()) refresh();
+    }
+
+    if (!takeSeed()) {
+      seedListeners.add(onSeed);
+      timer = setTimeout(() => {
+        seedListeners.delete(onSeed);
+        refresh();
+      }, SEED_WAIT_MS);
     }
 
     function onVisibilityChange() {
@@ -57,11 +109,11 @@ export function useFleet(): FleetState {
       else clearTimeout(timer);
     }
 
-    refresh();
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       cancelled = true;
       clearTimeout(timer);
+      seedListeners.delete(onSeed);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);

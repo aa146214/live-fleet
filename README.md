@@ -19,8 +19,15 @@ while a key is set (e.g. for a design review), run with `FLEET_DEMO=1`.
 
 - `src/app/api/vehicles/route.ts` calls FleetSmart `GET /live_views?include=vehicle,vehicle_location`
   on the server, so the API key never reaches the browser. Responses are cached for 10 seconds
-  and concurrent requests are shared, keeping within FleetSmart's one-request-per-second limit.
-- The browser polls `/api/vehicles` every 15 seconds while the tab is visible.
+  and concurrent requests are shared. Every FleetSmart request waits its turn in one queue,
+  keeping within its one-request-per-second limit.
+- The first vehicles are streamed in with the page (`src/app/page.tsx`), so loading them starts
+  when the page is requested rather than once the browser has run its scripts. After that the
+  browser polls `/api/vehicles` every 15 seconds while the tab is visible.
+- A server's first request fetches the whole fleet, at the same time as reading the routes and
+  shuttles from the database, and learns the shuttles' FleetSmart vehicle ids. After that it asks
+  for just the shuttles (`filter[vehicle_id]`), about three times faster than the whole fleet.
+  FleetSmart can't filter by registration, hence the first full fetch.
 - The map uses Leaflet with OpenStreetMap tiles. Bus markers, pins, rows, details cards and
   route filters follow the updated Figma design. Moving buses point their direction of travel;
   parked ones sit upright without the arrow.
@@ -87,7 +94,7 @@ seconds.
   failed attempts are counted per server instance (5 failures lock that client out for 15 minutes),
   which slows guessing but isn't a hard limit on serverless hosting.
 - The data lives in Neon Postgres (`DATABASE_URL`). The tables are created (and an older database
-  upgraded) the first time the admin or map reads them. Without `DATABASE_URL` the app falls back to
+  upgraded) when a query finds one missing, so normal page loads don't run the setup queries. Without `DATABASE_URL` the app falls back to
   `src/config/vehicle-assignments.ts` (each vehicle gets its route's usual stops) and the admin page
   says nothing can be saved.
 - The map shows only the vehicles set up here as shuttles (each with a route). Until one is set up,

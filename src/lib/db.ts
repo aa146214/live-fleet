@@ -47,21 +47,45 @@ async function createSchema(sql: Sql): Promise<void> {
   }
 }
 
-/** The database client, with the tables created on first use (safe to repeat). */
+/** The Postgres error code (SQLSTATE), if the database answered with an error. */
+const errorCode = (error: unknown) => String((error as { code?: unknown } | null)?.code ?? "");
+/** Postgres error codes for a missing table or column: the schema needs creating or upgrading. */
+const MISSING_SCHEMA = new Set(["42P01", "42703"]);
+
+/** A database that has been idle can fail its first request while it wakes up. */
+const WAKE_RETRY_MS = 1500;
+
+/** Creates (or upgrades) the tables once per server, however many queries hit a missing one. */
+function ensureSchema(sql: Sql): Promise<void> {
+  schema ??= createSchema(sql).catch((error) => {
+    schema = undefined;
+    throw error;
+  });
+  return schema;
+}
+
+/**
+ * The database client. Queries run straight away; the tables are only created (or an
+ * older database upgraded) when a query finds one missing, so a server's first page
+ * load doesn't wait on six setup queries every time it starts.
+ */
 export async function getSql(): Promise<Sql> {
   if (!client) {
     const url = process.env.DATABASE_URL;
     if (!url) throw new Error("DATABASE_URL is not set");
-    client = neon(url) as unknown as Sql;
+    const raw = neon(url) as unknown as Sql;
+    client = async (strings, ...values) => {
+      try {
+        return await raw(strings, ...values);
+      } catch (error) {
+        const code = errorCode(error);
+        if (MISSING_SCHEMA.has(code)) await ensureSchema(raw);
+        // Other errors from Postgres itself (a duplicate code, say) won't go away by retrying.
+        else if (/^[0-9A-Z]{5}$/.test(code)) throw error;
+        else await new Promise((resolve) => setTimeout(resolve, WAKE_RETRY_MS));
+        return raw(strings, ...values);
+      }
+    };
   }
-  const ready = client;
-  schema ??= createSchema(ready)
-    // A database that has been idle can fail its first request while it wakes up.
-    .catch(() => new Promise((resolve) => setTimeout(resolve, 1500)).then(() => createSchema(ready)))
-    .catch((error) => {
-      schema = undefined;
-      throw error;
-    });
-  await schema;
   return client;
 }
