@@ -176,11 +176,16 @@ export function startMotion(fix: Fix): Motion {
 /** A report older than this is already history: its drive isn't replayed when the map opens. */
 const REPLAY_MAX_AGE_MS = 2 * 60_000;
 
+/** About how long a report takes to reach the map after the tracker took it. */
+const DELIVERY_DELAY_MS = 20_000;
+
 /**
  * The first motion for a minibus. With the road from its previous report known, it
  * drives that road to the report straight away, rather than sitting still until the
- * next report arrives. A report that is already old (a parked minibus's last report,
- * say) is just put where it was reported: it isn't moving.
+ * next report arrives, and it joins the drive part-way: a map that had been open all along
+ * started this drive when the report arrived, so one opened later starts where that one
+ * would be now, not back at the beginning. A report that is already old (a parked
+ * minibus's last report, say) is just put where it was reported: it isn't moving.
  */
 export function firstMotion(fix: Fix, now: number): Motion {
   if (now - fix.at > REPLAY_MAX_AGE_MS) return startMotion(fix);
@@ -188,13 +193,9 @@ export function firstMotion(fix: Fix, now: number): Motion {
   const road = fix.road ? makePath([...fix.road.points, fixPoint(fix)]) : null;
   if (!road || road.points.length < 2) return startMotion(fix);
   const gap = Date.parse(fix.report) - Date.parse(fix.road!.since);
-  return {
-    fix,
-    path: road,
-    start: now,
-    duration: Math.min(Math.max(Number.isFinite(gap) ? gap : MIN_DRIVE_MS, MIN_DRIVE_MS), MAX_DRIVE_MS),
-    onRoad: true,
-  };
+  const duration = Math.min(Math.max(Number.isFinite(gap) ? gap : MIN_DRIVE_MS, MIN_DRIVE_MS), MAX_DRIVE_MS);
+  const elapsed = Math.min(Math.max(now - (fix.at + DELIVERY_DELAY_MS), 0), duration);
+  return { fix, path: road, start: now - elapsed, duration, onRoad: true };
 }
 
 function progressAt(motion: Motion, now: number): number {

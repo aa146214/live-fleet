@@ -1,6 +1,6 @@
 import { getAssignments, getRoutes, normaliseVrn, type Assignment } from "./config-store";
 import { distanceMetres, estimateNextDestination } from "./destination";
-import { attachRoads, nearestRoad, streetNear } from "./road-paths";
+import { attachRoads, nearestRoad, streetNear, type PreviousReport } from "./road-paths";
 import { locateOnLoop, loopIfReady, loopStopsFor, nextStop, PREDICT_BETWEEN_REPORTS, roadAhead } from "./route-loops";
 import {
   STUDIO_LOCATION,
@@ -71,7 +71,7 @@ async function fetchPage(page: number): Promise<JsonApiDocument> {
 }
 
 /** One request to the FleetSmart API, in turn (it allows one per second per client). */
-export async function fleetSmartGet(path: string, params: URLSearchParams): Promise<JsonApiDocument> {
+export async function fleetSmartGet(path: string, params: URLSearchParams, timeoutMs?: number): Promise<JsonApiDocument> {
   await fleetSmartTurn();
   const headers: Record<string, string> = {
     "X-API-KEY": process.env.FLEETSMART_API_KEY ?? "",
@@ -80,7 +80,11 @@ export async function fleetSmartGet(path: string, params: URLSearchParams): Prom
   };
   if (process.env.FLEETSMART_CLIENT_ID) headers["X-CLIENT-ID"] = process.env.FLEETSMART_CLIENT_ID;
 
-  const response = await fetch(`${BASE_URL}${path}?${params}`, { headers, cache: "no-store" });
+  const response = await fetch(`${BASE_URL}${path}?${params}`, {
+    headers,
+    cache: "no-store",
+    ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
+  });
   if (!response.ok) {
     throw new Error(`FleetSmart responded ${response.status} ${response.statusText}`);
   }
@@ -224,6 +228,39 @@ async function fetchShuttleViews(assignments: Promise<Map<string, Assignment>>):
   return documents;
 }
 
+/**
+ * How long to wait for FleetSmart's history of one vehicle. Two reports for one vehicle take
+ * about two seconds, but a request that covers several vehicles never came back, so ask for
+ * them one at a time.
+ */
+const HISTORY_TIMEOUT_MS = 8000;
+
+/** The report before `report`, from the vehicle's history in FleetSmart. */
+const previousReportOf: PreviousReport = async (vehicle, report) => {
+  const doc = await fleetSmartGet(
+    "/vehicle_locations",
+    new URLSearchParams({ "filter[vehicle_id]": vehicle.id, "page[size]": "2", sort: "-id" }),
+    HISTORY_TIMEOUT_MS,
+  );
+  const before = doc.data
+    .map((row) => row.attributes)
+    .filter((a) => asString(a.date_time) && Date.parse(asString(a.date_time)) < Date.parse(report.at))
+    .sort((a, b) => Date.parse(asString(b.date_time)) - Date.parse(asString(a.date_time)))[0];
+  const lat = asNumber(before?.latitude);
+  const lng = asNumber(before?.longitude);
+  if (!before || lat === null || lng === null) return null;
+  const speedMph = asNumber(before.speed);
+  const reported = asNumber(before.heading);
+  return {
+    lat,
+    lng,
+    at: asString(before.date_time),
+    speedMph,
+    // As for the live report: a parked tracker's heading of 0 means unknown.
+    heading: (speedMph ?? 0) > 0 || reported !== 0 ? reported : null,
+  };
+};
+
 /** Reads the routes, the shuttles and their live positions side by side, rather than one after another. */
 async function fetchLiveVehicles(): Promise<{ routes: ShuttleRoute[]; vehicles: Vehicle[] }> {
   const assignmentsRead = getAssignments();
@@ -233,7 +270,7 @@ async function fetchLiveVehicles(): Promise<{ routes: ShuttleRoute[]; vehicles: 
   const [routes, assignments, documents] = await Promise.all([getRoutes(), assignmentsRead, views]);
 
   const vehicles = toVehicles(documents, assignments, routes);
-  await attachRoads(vehicles, ROAD_LOOKUP_WAIT_MS);
+  await attachRoads(vehicles, ROAD_LOOKUP_WAIT_MS, previousReportOf);
   const places = withFleetPlaces(routes, await fleetPlaces);
   for (const vehicle of vehicles) {
     if (vehicle.stops) vehicle.routeText = stopSequence(places, routes, vehicle.stops);
@@ -410,7 +447,7 @@ function applyRouterDetails(vehicles: Vehicle[], routes: ShuttleRoute[], places:
 }
 
 /** How long a refresh waits for new road lookups before answering without them. */
-const ROAD_LOOKUP_WAIT_MS = 3000;
+const ROAD_LOOKUP_WAIT_MS = 5000;
 
 let cached: { at: number; snapshot: FleetSnapshot } | null = null;
 let inFlight: Promise<FleetSnapshot> | null = null;

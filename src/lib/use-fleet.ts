@@ -43,9 +43,9 @@ export function useFleet(): FleetState {
     // Each reading also includes the response's travel time, so the smallest is the closest.
     const clockReadings: number[] = [];
 
-    function receive(snapshot: FleetSnapshot, readClock: boolean) {
+    function receive(snapshot: FleetSnapshot, readClock: boolean, receivedAt = Date.now()) {
       if (readClock && snapshot.serverTime) {
-        clockReadings.push(Date.now() - Date.parse(snapshot.serverTime));
+        clockReadings.push(receivedAt - Date.parse(snapshot.serverTime));
         if (clockReadings.length > CLOCK_SAMPLES) clockReadings.shift();
       }
       setState({
@@ -81,8 +81,11 @@ export function useFleet(): FleetState {
     function takeSeed(): boolean {
       if (!seed || Date.now() - seed.at > SEED_MAX_AGE_MS) return false;
       if (seed.snapshot) {
-        // Not a clock reading: it may have waited a while in the page before this ran.
-        receive(seed.snapshot, false);
+        // A clock reading too, taken when it arrived: it may be a little high (the page's travel
+        // time), but the smallest reading is the one used, so later polls only improve it. Without
+        // it the first drawing would take this browser's clock to be right, and a minibus joined
+        // part-way along its drive would be placed wrongly by however far the clock is out.
+        receive(seed.snapshot, true, seed.at);
         scheduleRefresh();
       } else {
         refresh();

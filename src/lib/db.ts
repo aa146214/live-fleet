@@ -37,6 +37,16 @@ async function createSchema(sql: Sql): Promise<void> {
     )`;
   // The places a vehicle calls at, in order (place ids, comma separated). Added after the first release.
   await sql`alter table vehicle_assignments add column if not exists stops text not null default ''`;
+  // Each shuttle's last two reports and the road between them (see report-store.ts), so a server
+  // that has just started, or another one, still knows where a minibus came from.
+  await sql`
+    create table if not exists vehicle_transitions (
+      vehicle_id text primary key,
+      from_report jsonb,
+      to_report jsonb not null,
+      road jsonb,
+      updated_at timestamptz not null default now()
+    )`;
   // The three routes always exist; the admin edits them rather than adding or removing any.
   for (const route of DEFAULT_ROUTES) {
     await sql`

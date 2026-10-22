@@ -1,5 +1,6 @@
 import { distanceMetres } from "./destination";
 import type { RoadRoute, Street } from "./polyline-simulation";
+import { loadTransitions, saveTransition, type Report, type Transition } from "./report-store";
 import type { LatLng } from "./routes";
 import type { Vehicle } from "./types";
 
@@ -41,19 +42,9 @@ const LOOSE_SNAP_RADIUS_M = 80;
 /** How closely the road at each end must match the minibus's heading. */
 const HEADING_TOLERANCE = 60;
 
-interface Report extends LatLng {
-  at: string;
-  heading: number | null;
-  speedMph: number | null;
-}
+export type { Report };
 
-interface Transition {
-  from: Report | null;
-  to: Report;
-  path?: LatLng[] | null;
-}
-
-/** The latest two reports per vehicle, with the road between them once known. */
+/** The latest two reports per vehicle, with the road between them once known (this server's copy of report-store). */
 const transitions = new Map<string, Transition>();
 
 let routerSlot = Promise.resolve();
@@ -311,27 +302,48 @@ function needsRoad(from: Report | null, to: Report): from is Report {
   return gap > 0 && gap <= MAX_GAP_MS && distanceMetres(from, to) >= MIN_MOVE_M;
 }
 
+/** The trackers report about once a minute; a stored report further back than this isn't the one just before. */
+const ADJACENT_GAP_MS = 100_000;
+/** A report older than this isn't worth a history lookup: the map doesn't replay its drive (see motion.ts). */
+const RECENT_REPORT_MS = 150_000;
+
+/** The report just before `report`, from FleetSmart's history, or null if it can't be had. */
+export type PreviousReport = (vehicle: Vehicle, report: Report) => Promise<Report | null>;
+
 /**
- * Adds `road` to each vehicle whose road since its previous report is known. New
- * lookups get up to `waitMs`; slower ones are attached to later snapshots.
+ * Adds `road` to each vehicle whose road since its previous report is known. The previous
+ * report comes from this server's memory, or from the database (another server may have seen
+ * it), and, when that isn't the report just before (nobody was watching for a while, or the
+ * server is new), from FleetSmart's history, so a map opened cold still has the road to draw.
+ * New lookups get up to `waitMs`; slower ones carry on and are attached to later snapshots.
  */
-export async function attachRoads(vehicles: Vehicle[], waitMs: number): Promise<void> {
-  const lookups: Promise<unknown>[] = [];
+export async function attachRoads(vehicles: Vehicle[], waitMs: number, previousReport?: PreviousReport): Promise<void> {
+  const fresh: { vehicle: Vehicle; report: Report; known: Transition | undefined }[] = [];
   for (const vehicle of vehicles) {
     const report = reportOf(vehicle);
     if (!report) continue;
     const known = transitions.get(vehicle.id);
     if (known && known.to.at === report.at) continue;
+    fresh.push({ vehicle, report, known });
+  }
 
-    const from = known?.to ?? null;
-    const transition: Transition = { from, to: report };
-    transitions.set(vehicle.id, transition);
-    if (needsRoad(from, report)) {
-      lookups.push(
-        fetchRoad(from, report).then((path) => {
-          transition.path = path;
-        }),
-      );
+  const lookups: Promise<unknown>[] = [];
+  if (fresh.length > 0) {
+    // Another server (or this one before it restarted) may have dealt with these already.
+    const stored = await loadTransitions(fresh.map((item) => item.vehicle.id));
+    for (const { vehicle, report, known } of fresh) {
+      const saved = stored.get(vehicle.id);
+      if (saved && saved.to.at === report.at) {
+        transitions.set(vehicle.id, saved);
+        continue;
+      }
+      // Another server has already seen a newer report than this one's (its fetch was earlier):
+      // leave what is stored alone.
+      if (saved && Date.parse(saved.to.at) > Date.parse(report.at)) continue;
+      const before = [known?.to, saved?.to].filter((r): r is Report => Boolean(r)).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0];
+      const transition: Transition = { from: before ?? null, to: report };
+      transitions.set(vehicle.id, transition);
+      lookups.push(resolveRoad(vehicle, transition, previousReport));
     }
   }
 
@@ -345,4 +357,18 @@ export async function attachRoads(vehicles: Vehicle[], waitMs: number): Promise<
       vehicle.road = { since: transition.from.at, points: transition.path };
     }
   }
+}
+
+/** Finds the report before this one if need be, then the road between them, and keeps both. */
+async function resolveRoad(vehicle: Vehicle, transition: Transition, previousReport?: PreviousReport): Promise<void> {
+  const { to } = transition;
+  const gap = transition.from ? Date.parse(to.at) - Date.parse(transition.from.at) : Infinity;
+  const recent = Date.now() - Date.parse(to.at) <= RECENT_REPORT_MS;
+  if (gap > ADJACENT_GAP_MS && recent && previousReport) {
+    const previous = await previousReport(vehicle, to).catch(() => null);
+    if (previous && Date.parse(previous.at) < Date.parse(to.at)) transition.from = previous;
+  }
+  const { from } = transition;
+  transition.path = needsRoad(from, to) ? await fetchRoad(from, to) : null;
+  await saveTransition(vehicle.id, transition);
 }

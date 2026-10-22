@@ -55,6 +55,14 @@ drives each minibus along the road it took (`src/lib/road-paths.ts`, `src/lib/mo
   (replaying one shuttle's day, it was up to 400 m off). So it follows the road actually driven,
   about one report behind. The prediction code is kept behind `PREDICT_BETWEEN_REPORTS` in
   `src/lib/route-loops.ts`.
+- Each shuttle's last two reports and the road between them are kept in the database
+  (`vehicle_transitions`), so a server that has just started, or another one on hosting that runs
+  several, still knows where a minibus came from. Where they aren't the report just before (the
+  server is new, or nobody had the map open for a while), the report before is fetched from
+  FleetSmart's history for that vehicle (about two seconds each, one vehicle at a time, because a
+  request covering several vehicles never came back).
+- A map opened part-way through a drive joins it part-way: it starts where a map that had been open
+  all along would be, instead of waiting at the report until the next one arrives and then jumping.
 - If the router finds no road (it is asked twice, the second time with a looser search), a hop of
   under 60 m is drawn as a straight line and a longer one jumps, rather than cutting across blocks
   and buildings. Gaps over 5 minutes also jump.
