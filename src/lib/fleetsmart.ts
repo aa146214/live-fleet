@@ -294,6 +294,8 @@ export interface FleetPlace {
 let placesCache: { at: number; places: FleetPlace[] } | undefined;
 let placesLoading: Promise<FleetPlace[]> | undefined;
 const PLACES_CACHE_MS = 10 * 60_000;
+/** Places in the FleetSmart account that are never offered as stops (Warner Bros. doesn't want them listed). */
+const HIDDEN_PLACE_NAMES = [/pinewood/i];
 
 /**
  * The places in the FleetSmart account, or none if it can't be reached. Refreshed every
@@ -320,6 +322,7 @@ async function loadFleetPlaces(): Promise<FleetPlace[]> {
         const lat = asNumber(poi.attributes.lat);
         const lng = asNumber(poi.attributes.lng);
         const name = tidyPlaceName(asString(poi.attributes.name));
+        if (HIDDEN_PLACE_NAMES.some((hidden) => hidden.test(name))) continue;
         if (lat !== null && lng !== null && name) places.push({ id: `poi-${poi.id}` as PlaceId, name, lat, lng });
       }
       if (doc.data.length < PAGE_SIZE) break;

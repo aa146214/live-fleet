@@ -1,7 +1,7 @@
 import Image from "next/image";
 import { formatUpdated } from "@/lib/format";
 import { usePlaces, useRoutes } from "@/lib/routes-context";
-import { getRoute, routeColor, routeSubtitle, shortDestination, stopSequence } from "@/lib/routes";
+import { routeColor, stopSequence } from "@/lib/routes";
 import type { Vehicle } from "@/lib/types";
 import { DetailsCard } from "./DetailsCard";
 import styles from "./DetailsCard.module.css";
@@ -15,14 +15,12 @@ interface VehicleDetailsProps {
 export function VehicleDetails({ vehicle, onClose }: VehicleDetailsProps) {
   const routes = useRoutes();
   const places = usePlaces();
-  const route = getRoute(routes, vehicle.routeId);
   const color = routeColor(vehicle.routeId);
 
   return (
     <DetailsCard
       id={`vehicle-${vehicle.code}`}
       title={`Minibus ${vehicle.code}`}
-      subtitle={route ? routeSubtitle(route) : "No route"}
       color={color}
       onClose={onClose}
       closeLabel="Close vehicle details"
@@ -38,7 +36,7 @@ export function VehicleDetails({ vehicle, onClose }: VehicleDetailsProps) {
       }
       rows={[
         ["Vehicle registration", vehicle.registration],
-        ["Next destination", shortDestination(vehicle.nextDestination)],
+        ["Next destination", vehicle.nextDestination],
         ["Vehicle location", vehicle.address],
         ["Route information", vehicle.routeText ?? (vehicle.stops ? stopSequence(places, routes, vehicle.stops) : "Not assigned to a shuttle route")],
         ["Last updated", formatUpdated(vehicle.updatedAt)],

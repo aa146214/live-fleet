@@ -7,7 +7,10 @@ export interface LatLng {
 
 export interface ShuttleRoute {
   id: RouteId;
+  /** The full name, e.g. "Watford Junction Train Station". */
   name: string;
+  /** A short form for tight spaces (the route buttons in the header), e.g. "Watford". */
+  shortName: string;
   /** CSS custom property holding the route colour. */
   color: string;
   station: string;
@@ -18,8 +21,7 @@ export interface ShuttleRoute {
 }
 
 /** Where shuttles drop off at the studio; the first stop after leaving a station. */
-export const STUDIO_DESTINATION = "Leavesden studio · South Entrance";
-const STUDIO_PREFIX = "Leavesden studio · ";
+export const STUDIO_DESTINATION = "WBSL South Entrance";
 
 /** Leavesden studio (where the WB pin sits on the map). */
 export const STUDIO_LOCATION: LatLng = { lat: 51.6906, lng: -0.418 };
@@ -35,28 +37,31 @@ export const NORTH_ENTRANCE_LOCATION: LatLng = { lat: 51.69244555843036, lng: -0
 export const DEFAULT_ROUTES: ShuttleRoute[] = [
   {
     id: 1,
-    name: "Watford",
+    name: "Watford Junction Train Station",
+    shortName: "Watford",
     color: "var(--color-blue)",
-    station: "Watford Junction station",
-    terminus: "Watford Junction",
+    station: "Watford Junction Train Station",
+    terminus: "Watford Junction Train Station",
     what3words: "///hired.boat.speaks",
     stationLocation: { lat: 51.6635, lng: -0.3963 },
   },
   {
     id: 2,
-    name: "St Albans",
+    name: "St Albans City Train Station",
+    shortName: "St Albans",
     color: "var(--color-black)",
-    station: "St Albans station",
-    terminus: "St Albans station",
+    station: "St Albans City Train Station",
+    terminus: "St Albans City Train Station",
     what3words: "///soup.moral.easy",
     stationLocation: { lat: 51.7503, lng: -0.3276 },
   },
   {
     id: 3,
-    name: "Rickmansworth",
+    name: "Rickmansworth Train Station",
+    shortName: "Rickmansworth",
     color: "var(--color-green)",
-    station: "Rickmansworth station",
-    terminus: "Rickmansworth station",
+    station: "Rickmansworth Train Station",
+    terminus: "Rickmansworth Train Station",
     what3words: "///trim.lied.tops",
     stationLocation: { lat: 51.6402, lng: -0.4732 },
   },
@@ -87,14 +92,14 @@ export function placesFor(routes: ShuttleRoute[]): Place[] {
   return [
     {
       id: "studio-north",
-      name: "Leavesden studio · North Entrance",
+      name: "WBSL North Entrance",
       routeId: null,
       entrance: "North Entrance",
       ...NORTH_ENTRANCE_LOCATION,
     },
     {
       id: "studio-south",
-      name: "Leavesden studio · South Entrance",
+      name: "WBSL South Entrance",
       routeId: null,
       entrance: "South Entrance",
       ...SOUTH_ENTRANCE_LOCATION,
@@ -116,11 +121,17 @@ export function getRoute(routes: ShuttleRoute[], id: RouteId | null): ShuttleRou
   return routes.find((route) => route.id === id);
 }
 
+/** Words that stay in capitals when a name FleetSmart wrote in capitals is tidied. */
+const ACRONYMS = new Set(["WBSL", "WB"]);
+
 /** FleetSmart writes some place names in capitals; "WATFORD JUNCTION" reads better as "Watford Junction". */
 export function tidyPlaceName(name: string): string {
   const trimmed = name.trim();
   if (trimmed.length <= 4 || trimmed !== trimmed.toUpperCase()) return trimmed;
-  return trimmed.toLowerCase().replace(/(^|\s)(\p{L})/gu, (_, space, letter) => space + letter.toUpperCase());
+  return trimmed
+    .split(/\s+/)
+    .map((word) => (ACRONYMS.has(word) ? word : word.charAt(0) + word.slice(1).toLowerCase()))
+    .join(" ");
 }
 
 /** A vehicle's route: the places it calls at, in order, then back to the first. */
@@ -133,11 +144,11 @@ export function isPlaceId(value: string): value is PlaceId {
   return value === "studio-north" || value === "studio-south" || /^station-[1-3]$/.test(value) || /^poi-\d+$/.test(value);
 }
 
-/** How a stop is written in a route sequence: the station's route name, or the entrance. */
+/** How a stop is written in a route sequence: the station's name, or the place's name (e.g. WBSL South Entrance). */
 export function stopLabel(places: Place[], routes: ShuttleRoute[], id: string): string {
   const place = getPlace(places, id);
   if (!place) return id;
-  return getRoute(routes, place.routeId)?.terminus ?? place.entrance ?? place.name;
+  return getRoute(routes, place.routeId)?.terminus ?? place.name;
 }
 
 /** e.g. "Watford Junction → South Entrance → North Entrance → Watford Junction" */
@@ -152,16 +163,6 @@ export function destinationOf(place: Place, routes: ShuttleRoute[]): string {
 
 export function routeSequence(route: ShuttleRoute): string {
   return stopSequence(placesFor([route]), [route], defaultStops(route));
-}
-
-/** e.g. "Route 1 · Watford Station" */
-export function routeSubtitle(route: ShuttleRoute): string {
-  return `Route ${route.id} · ${route.name} Station`;
-}
-
-/** The details card shortens the studio stop to just the entrance. */
-export function shortDestination(destination: string): string {
-  return destination.startsWith(STUDIO_PREFIX) ? destination.slice(STUDIO_PREFIX.length) : destination;
 }
 
 /** How many of the given minibuses are assigned to each route (unassigned ones aren't counted). */

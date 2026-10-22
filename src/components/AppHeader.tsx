@@ -15,13 +15,20 @@ export function AppHeader({ routeCounts, onSelectRoute }: AppHeaderProps) {
   return (
     <header className={styles.header}>
       <div className={styles.brand}>
-        <Image src="/brand/wb-logo.png" alt="Warner Bros. Leavesden Shuttle Map" width={60} height={60} priority />
-        <h1 className={styles.title}>Warner Bros. Leavesden Shuttle Map</h1>
+        <Image
+          src="/brand/wb-studios-leavesden-logo-white.png"
+          alt="Warner Bros. Studios Leavesden"
+          width={1600}
+          height={382}
+          className={styles.logo}
+          priority
+        />
+        <h1 className={styles.title}>Shuttle Map</h1>
       </div>
 
-      {/* Route key with live minibus counts (Figma "Route filters"); picking one shows its area
-          on the map. A route is filled in its colour once it has at least one minibus. */}
-      <ul className={styles.routes} aria-label="Minibuses per route">
+      {/* Route key (Figma "Route filters"); picking one shows its area on the map. A route is
+          filled in its colour once it has at least one minibus. */}
+      <ul className={styles.routes} aria-label="Routes">
         {routes.map((route) => {
           const count = routeCounts?.get(route.id);
           return (
@@ -30,11 +37,11 @@ export function AppHeader({ routeCounts, onSelectRoute }: AppHeaderProps) {
                 type="button"
                 className={count ? styles.route : `${styles.route} ${styles.empty}`}
                 style={{ "--route": route.color } as React.CSSProperties}
-                aria-label={`${route.name}: ${count ?? "loading"} minibus${count === 1 ? "" : "es"}. Show on map`}
+                aria-label={`${route.name}. Show on map`}
+                title={route.name}
                 onClick={() => onSelectRoute(route.id)}
               >
-                <span className={styles.routeCount}>{count ?? "–"}</span>
-                <span>{route.name}</span>
+                <span>{route.shortName}</span>
               </button>
             </li>
           );

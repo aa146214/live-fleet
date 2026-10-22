@@ -80,12 +80,12 @@ export function VehicleEditor({
       <p className={styles.help}>{registration}</p>
 
       <label className={styles.field}>
-        <span>Code shown on the map</span>
+        <span>Code shown on the map (the number plate unless you change it)</span>
         <input
           name="code"
           value={code}
           onChange={(event) => setCode(event.target.value)}
-          placeholder="e.g. W1"
+          placeholder={vrn}
           required
           maxLength={8}
           autoFocus={!existing}

@@ -4,9 +4,9 @@ import styles from "./DetailsCard.module.css";
 interface DetailsCardProps {
   id: string;
   title: string;
-  subtitle: string;
-  /** Route colour for the subtitle. */
-  color: string;
+  /** An optional line under the title, in `color`. */
+  subtitle?: string;
+  color?: string;
   icons: ReactNode;
   rows: Array<[label: string, value: ReactNode]>;
   onClose: () => void;
@@ -24,9 +24,11 @@ export function DetailsCard({ id, title, subtitle, color, icons, rows, onClose, 
           <h2 id={headingId} className={styles.title}>
             {title}
           </h2>
-          <p className={styles.subtitle} style={{ color }}>
-            {subtitle}
-          </p>
+          {subtitle && (
+            <p className={styles.subtitle} style={{ color }}>
+              {subtitle}
+            </p>
+          )}
         </div>
         <button type="button" className={styles.close} onClick={onClose} aria-label={closeLabel}>
           ×

@@ -209,7 +209,7 @@ function VehicleMarker({
   const reportedPosition = useMemo<L.LatLngTuple>(() => [vehicle.lat, vehicle.lng], [vehicle.lat, vehicle.lng]);
   const ref = useCallback((marker: L.Marker | null) => onMarker(vehicle.id, marker), [onMarker, vehicle.id]);
   const route = getRoute(useRoutes(), routeId);
-  const label = `Minibus ${code}${route ? `, Route ${route.id} ${route.name}` : ""}`;
+  const label = `Minibus ${code}${route ? `, ${route.name}` : ""}`;
 
   return (
     <Marker

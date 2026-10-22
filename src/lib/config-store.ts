@@ -30,11 +30,9 @@ interface Cached<T> {
   at: number;
   value: T;
 }
-let routesCache: Cached<ShuttleRoute[]> | undefined;
 let assignmentsCache: Cached<Assignment[]> | undefined;
 
 const invalidate = () => {
-  routesCache = undefined;
   assignmentsCache = undefined;
 };
 
@@ -57,18 +55,12 @@ function toAssignment(row: Record<string, unknown>): Assignment {
   return { vrn: String(row.vrn), code: String(row.code), routeId, stops: stops.length >= 2 ? stops : defaultsFor(routeId) };
 }
 
-/** The routes with the admin's edits applied. */
+/**
+ * The routes. Their names, stations and positions are defined in code (routes.ts): the admin
+ * doesn't edit them, and a stored copy would only go out of date when the wording changes.
+ */
 export async function getRoutes(): Promise<ShuttleRoute[]> {
-  if (!hasDatabase()) return DEFAULT_ROUTES;
-  if (routesCache && Date.now() - routesCache.at < CACHE_MS) return routesCache.value;
-  try {
-    const value = await readRoutes();
-    routesCache = { at: Date.now(), value };
-    return value;
-  } catch (error) {
-    console.error("[config] could not read routes:", error instanceof Error ? error.message : error);
-    return routesCache?.value ?? DEFAULT_ROUTES;
-  }
+  return DEFAULT_ROUTES;
 }
 
 /** The shuttles set up in the admin, which are the vehicles shown on the map. */
@@ -96,29 +88,10 @@ async function readAssignments(): Promise<Assignment[]> {
   return rows.map(toAssignment);
 }
 
-async function readRoutes(): Promise<ShuttleRoute[]> {
-  const sql = await getSql();
-  const rows = await sql`
-    select id, name, station, terminus, what3words, station_lat, station_lng from routes order by id`;
-  return DEFAULT_ROUTES.map((route) => {
-    const row = rows.find((r) => asRouteId(r.id) === route.id);
-    return row
-      ? {
-          ...route,
-          name: String(row.name),
-          station: String(row.station),
-          terminus: String(row.terminus),
-          what3words: String(row.what3words),
-          stationLocation: { lat: Number(row.station_lat), lng: Number(row.station_lng) },
-        }
-      : route;
-  });
-}
-
 // --- Used by the admin pages (these read the database directly, not the cache) ---
 
 export const adminListAssignments = readAssignments;
-export const adminListRoutes = readRoutes;
+export const adminListRoutes = getRoutes;
 export async function adminSaveAssignment(assignment: Assignment): Promise<void> {
   const sql = await getSql();
   await sql`

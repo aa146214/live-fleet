@@ -14,6 +14,13 @@
   gap: 10px;
 }
 
+/* The logo is white, for the navy header; its shape is wide, so it is sized by its height. */
+.logo {
+  flex-shrink: 0;
+  width: auto;
+  height: 38px;
+}
+
 .title {
   font-size: 16px;
   font-weight: 700;
@@ -28,7 +35,8 @@
 
 .item {
   display: flex;
-  flex: 1 0 0;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .route {
@@ -40,20 +48,15 @@
   justify-content: center;
   gap: 6px;
   min-width: 0;
-  padding: 8px 16px;
+  padding: 8px 12px;
   border: 1px solid var(--route);
   border-radius: 16px;
   background: var(--route);
   color: var(--color-white);
   font-size: 10.8px;
-  line-height: 1.4;
-  white-space: nowrap;
+  line-height: 1.25;
+  text-align: center;
   transition: background-color 200ms ease, border-color 200ms ease;
-}
-
-/* "Rickmansworth" keeps its natural width; the other two share the rest. */
-.item:last-child {
-  flex: 0 0 auto;
 }
 
 .route:focus-visible {
@@ -67,12 +70,12 @@
   background: transparent;
 }
 
-.routeCount {
-  font-weight: 700;
-}
-
 /* Desktop header (Figma "Desktop header", 1440 x 102) */
 @media (min-width: 900px) {
+  .logo {
+    height: 46px;
+  }
+
   .header {
     flex-direction: row;
     align-items: center;
@@ -85,8 +88,11 @@
     flex: 0 0 auto;
   }
 
-  .item,
-  .item:last-child {
+  .item {
     flex: 0 0 auto;
+  }
+
+  .route {
+    white-space: nowrap;
   }
 }

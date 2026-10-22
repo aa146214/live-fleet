@@ -252,3 +252,13 @@ a.secondary {
   text-align: center;
   white-space: nowrap;
 }
+
+.listBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.search {
+  max-width: 420px;
+}

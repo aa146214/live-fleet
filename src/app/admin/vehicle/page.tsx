@@ -65,7 +65,7 @@ export default async function VehiclePage({ searchParams }: { searchParams: Sear
   const recent = visits ? visitsText(visits, vrn) : "";
   const visitHint =
     suggestion && suggestedRoute
-      ? `Suggested: Route ${suggestedRoute.id} · ${suggestedRoute.name}, from ${suggestion.visits} visits to ${suggestion.place} in the last ${visits!.days} days.`
+      ? `Suggested: ${suggestedRoute.name}, from ${suggestion.visits} visits to ${suggestion.place} in the last ${visits!.days} days.`
       : recent
         ? `Recent visits: ${recent}. None of them is a route's station.`
         : visits
@@ -73,7 +73,7 @@ export default async function VehiclePage({ searchParams }: { searchParams: Sear
           : hasFleetSmartCredentials()
             ? "Looking up where this vehicle has been lately; reload in a minute for a route suggestion."
             : "";
-  const routeOptions = routes.map((route) => ({ id: route.id, label: `Route ${route.id} · ${route.name}` }));
+  const routeOptions = routes.map((route) => ({ id: route.id, label: route.name }));
 
   return (
     <>
@@ -85,7 +85,7 @@ export default async function VehiclePage({ searchParams }: { searchParams: Sear
         <VehicleEditor
           vrn={vrn}
           registration={registration}
-          initialCode={existing?.code ?? ""}
+          initialCode={existing?.code ?? vrn}
           initialStops={existing?.stops ?? []}
           existing={Boolean(existing)}
           places={options.map(({ id, name }) => ({ id, name }))}

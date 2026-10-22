@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { ENTRANCES, getRoute, routeColor, routeSequence, routeSubtitle, type Place } from "@/lib/routes";
+import { ENTRANCES, getRoute, routeColor, routeSequence, type Place } from "@/lib/routes";
 import { useRoutes } from "@/lib/routes-context";
 import type { RouteId } from "@/lib/types";
 import { DetailsCard } from "./DetailsCard";
@@ -34,7 +34,6 @@ export function PlaceDetails({ place, routeCounts, onClose }: PlaceDetailsProps)
     return (
       <DetailsCard
         {...common}
-        subtitle={routeSubtitle(route)}
         color={routeColor(route.id)}
         icons={
           <span className={styles.pin}>

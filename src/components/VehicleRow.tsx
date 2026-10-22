@@ -23,7 +23,7 @@ export function VehicleRow({ vehicle, selected, onSelect }: VehicleRowProps) {
       </span>
       <span className={styles.text}>
         <span className={styles.route}>
-          {route ? `${route.name} · Route ${route.id}` : "Unassigned minibus"}
+          {route ? route.name : "Unassigned minibus"}
         </span>
         <span className={styles.next}>
           {route ? `Next: ${vehicle.nextDestination}` : vehicle.address}

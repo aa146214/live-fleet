@@ -5,7 +5,7 @@ import { signOutAction } from "./actions";
 import styles from "./admin.module.css";
 
 export const metadata: Metadata = {
-  title: "Admin · Leavesden Shuttle",
+  title: "Admin · Shuttle Map",
   robots: { index: false, follow: false },
 };
 
@@ -15,7 +15,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className={styles.page}>
       <header className={styles.header}>
         <h1>
-          <Link href="/admin">Leavesden Shuttle · Admin</Link>
+          <Link href="/admin">Shuttle Map · Admin</Link>
         </h1>
         <nav>
           <Link href="/">View map</Link>

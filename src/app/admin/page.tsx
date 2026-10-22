@@ -4,6 +4,7 @@ import { getVisitSummary, suggestRoute, visitsText } from "@/lib/fleet-visits";
 import { hasFleetSmartCredentials, knownPlaces, listFleetVehicles, type FleetVehicle } from "@/lib/fleetsmart";
 import { stopSequence } from "@/lib/routes";
 import { gate } from "./gate";
+import { VehicleList, type VehicleListRow } from "./VehicleList";
 import styles from "./admin.module.css";
 
 type SearchParams = Promise<{ notice?: string; error?: string }>;
@@ -61,6 +62,57 @@ async function Vehicles() {
   const others = (fleet ?? []).filter((vehicle) => !assigned.has(vehicle.vrn));
   const inFleet = new Set((fleet ?? []).map((vehicle) => vehicle.vrn));
 
+  const editLink = (vrn: string) => `/admin/vehicle?vrn=${encodeURIComponent(vrn)}`;
+  const shuttleRows: VehicleListRow[] = assignments.map((assignment) => {
+    const sequence = stopSequence(places, routes, assignment.stops);
+    return {
+      key: assignment.vrn,
+      search: `${assignment.code} ${assignment.vrn} ${sequence}`,
+      content: (
+        <>
+          <div className={styles.itemText}>
+            <strong>{assignment.code}</strong> <span className={styles.vrn}>{assignment.vrn}</span>
+            {fleet && !inFleet.has(assignment.vrn) && <span className={styles.missing}> · not in FleetSmart</span>}
+            <p className={styles.help}>{sequence}</p>
+          </div>
+          <Link href={editLink(assignment.vrn)} className={styles.secondary}>
+            Edit route
+          </Link>
+        </>
+      ),
+    };
+  });
+  const otherRows: VehicleListRow[] = others.map((vehicle) => {
+    const suggestion = visits && suggestRoute(visits, routes, vehicle.vrn);
+    const route = suggestion && routes.find((r) => r.id === suggestion.routeId);
+    const seen = visits ? visitsText(visits, vehicle.vrn) : "";
+    return {
+      key: vehicle.vrn,
+      search: `${vehicle.registration} ${vehicle.vrn} ${vehicle.address}`,
+      content: (
+        <>
+          <div className={styles.itemText}>
+            <strong>{vehicle.registration}</strong>
+            <p className={styles.help}>
+              {vehicle.distanceKm.toFixed(1)} km from the studio{vehicle.isMinibus ? " · minibus" : ""}
+              {vehicle.address ? ` · ${vehicle.address}` : ""}
+            </p>
+            {suggestion && route && (
+              <p className={styles.suggestion}>
+                Suggested: {route.name} ({suggestion.visits} visits to {suggestion.place} in the last {visits!.days}{" "}
+                days)
+              </p>
+            )}
+            {!suggestion && seen && <p className={styles.help}>Recent visits: {seen}</p>}
+          </div>
+          <Link href={editLink(vehicle.vrn)} className={styles.primary}>
+            Add route
+          </Link>
+        </>
+      ),
+    };
+  });
+
   return (
     <>
       <section className={styles.card}>
@@ -70,22 +122,7 @@ async function Vehicles() {
             No shuttles yet, so the map is empty. Add a route to a vehicle below to put it on the map.
           </p>
         ) : (
-          <ul className={styles.list}>
-            {assignments.map((assignment) => (
-              <li key={assignment.vrn} className={styles.item}>
-                <div className={styles.itemText}>
-                  <strong>{assignment.code}</strong> <span className={styles.vrn}>{assignment.vrn}</span>
-                  {fleet && !inFleet.has(assignment.vrn) && (
-                    <span className={styles.missing}> · not in FleetSmart</span>
-                  )}
-                  <p className={styles.help}>{stopSequence(places, routes, assignment.stops)}</p>
-                </div>
-                <Link href={`/admin/vehicle?vrn=${encodeURIComponent(assignment.vrn)}`} className={styles.secondary}>
-                  Edit route
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <VehicleList label="shuttles" rows={shuttleRows} />
         )}
       </section>
 
@@ -100,34 +137,7 @@ async function Vehicles() {
                 ? " Looking up where each has been lately to suggest routes; reload in a minute."
                 : ""}
             </p>
-            <ul className={styles.list}>
-              {others.map((vehicle) => {
-                const suggestion = visits && suggestRoute(visits, routes, vehicle.vrn);
-                const route = suggestion && routes.find((r) => r.id === suggestion.routeId);
-                const seen = visits ? visitsText(visits, vehicle.vrn) : "";
-                return (
-                  <li key={vehicle.vrn} className={styles.item}>
-                    <div className={styles.itemText}>
-                      <strong>{vehicle.registration}</strong>
-                      <p className={styles.help}>
-                        {vehicle.distanceKm.toFixed(1)} km from the studio{vehicle.isMinibus ? " · minibus" : ""}
-                        {vehicle.address ? ` · ${vehicle.address}` : ""}
-                      </p>
-                      {suggestion && route && (
-                        <p className={styles.suggestion}>
-                          Suggested: Route {route.id} · {route.name} ({suggestion.visits} visits to {suggestion.place}{" "}
-                          in the last {visits!.days} days)
-                        </p>
-                      )}
-                      {!suggestion && seen && <p className={styles.help}>Recent visits: {seen}</p>}
-                    </div>
-                    <Link href={`/admin/vehicle?vrn=${encodeURIComponent(vehicle.vrn)}`} className={styles.primary}>
-                      Add route
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+            <VehicleList label="vehicles" rows={otherRows} />
           </>
         )}
       </section>

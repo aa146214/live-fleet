@@ -16,7 +16,8 @@ export function checkVehicle(
   const vrn = normaliseVrn(text(formData, "vrn"));
   if (!/^[A-Z0-9]{2,8}$/.test(vrn)) return { error: "Enter the registration as shown in FleetSmart (2–8 letters and numbers)." };
 
-  const code = text(formData, "code").toUpperCase();
+  // The code shown on the map defaults to the number plate.
+  const code = (text(formData, "code") || vrn).toUpperCase();
   if (!/^[A-Z0-9][A-Z0-9 -]{0,7}$/.test(code)) return { error: "The code is 1–8 letters or numbers, e.g. W1." };
 
   const stops = formData.getAll("stop").map(String);

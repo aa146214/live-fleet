@@ -78,7 +78,8 @@ drives each minibus along the road it took (`src/lib/road-paths.ts`, `src/lib/mo
 ## Admin
 
 `/admin` lists the shuttles and the other vehicles in your FleetSmart account. **Add route** (or
-**Edit route**) opens one screen where you give the vehicle a code and add its stops one by one
+**Edit route**) opens one screen where you give the vehicle a code (its number plate unless you
+change it) and add its stops one by one
 (the places set up in your FleetSmart account), reorder them and save. The shuttle drives
 the stops in that order and then returns to the first. Changes show on the map within about 30
 seconds.
@@ -107,8 +108,12 @@ seconds.
   says nothing can be saved.
 - The map shows only the vehicles set up here as shuttles (each with a route). Until one is set up,
   the map is empty.
-- The three routes' names and stations are in `src/lib/routes.ts` (and the `routes` table, which
-  the admin doesn't edit).
+- The three routes' names, stations and positions are defined in `src/lib/routes.ts`; the admin
+  doesn't edit them, so changing the wording is a code change (the `routes` table is kept only because
+  shuttles refer to it).
+- The vehicle lists in the admin have a search box (registration or place) once they are long enough.
+- Places named Pinewood in FleetSmart are never offered as stops (`HIDDEN_PLACE_NAMES` in
+  `src/lib/fleetsmart.ts`).
 
 ## Configure the shuttles
 
