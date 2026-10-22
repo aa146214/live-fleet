@@ -1,0 +1,82 @@
+/* The news strip under the header. Every banner sits in the same grid cell, so the strip is as tall
+   as the tallest and the banners fade over each other. */
+.strip {
+  display: grid;
+}
+
+.slide {
+  display: flex;
+  grid-area: 1 / 1;
+  flex-direction: column;
+  gap: 0;
+  padding: 10px 20px;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.45s ease,
+    visibility 0.45s;
+}
+
+.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.message {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.message a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.dots {
+  display: flex;
+  justify-content: center;
+  /* Pushed to the bottom, so the dots stay in one place whichever banner is shorter. */
+  margin: auto 0 -8px;
+  padding-top: 2px;
+}
+
+/* A small dot with a larger tap area around it, kept short so the strip stays slim. */
+.dot {
+  position: relative;
+  width: 24px;
+  height: 16px;
+  background: none;
+  cursor: pointer;
+}
+
+.dot::after {
+  position: absolute;
+  top: 5px;
+  left: 9px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+  opacity: 0.4;
+}
+
+.dotActive::after {
+  opacity: 1;
+}
+
+.dot:focus-visible,
+.message a:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slide {
+    transition: none;
+  }
+}

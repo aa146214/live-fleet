@@ -1,5 +1,6 @@
+import { isBannerColour, londonInputToIso, MAX_BANNER_MESSAGE, type BannerInput } from "./banners";
 import { normaliseVrn, type RouteInput } from "./config-store";
-import { isPlaceId, isRouteColour, type PlaceId } from "./routes";
+import { isPlaceId, isRouteColour, type LatLng, type PlaceId } from "./routes";
 import type { RouteId } from "./types";
 
 /** Checks admin form input. Each returns the cleaned value, or an `error` to show. */
@@ -38,4 +39,46 @@ export function checkAssignment(formData: FormData): Checked<{ vrn: string; code
   const routeId = Number(text(formData, "routeId"));
   if (!Number.isInteger(routeId) || routeId < 1) return { error: "Choose a route." };
   return { value: { vrn, code, routeId } };
+}
+
+/** A news banner: a message, a colour, on or off, and when it shows (UK time; either end can be left empty). */
+export function checkBanner(formData: FormData): Checked<BannerInput> {
+  const message = text(formData, "message");
+  if (!message || message.length > MAX_BANNER_MESSAGE) {
+    return { error: `Write the message (up to ${MAX_BANNER_MESSAGE} characters).` };
+  }
+  const colour = text(formData, "colour");
+  if (!isBannerColour(colour)) return { error: "Choose a colour." };
+  const link = text(formData, "link");
+  if (link && (link.length > 300 || !/^https?:\/\/\S+$/i.test(link))) {
+    return { error: "The link must start with http:// or https://." };
+  }
+
+  const startText = text(formData, "startsAt");
+  const endText = text(formData, "endsAt");
+  const startsAt = startText ? londonInputToIso(startText) : null;
+  const endsAt = endText ? londonInputToIso(endText) : null;
+  if ((startText && !startsAt) || (endText && !endsAt)) return { error: "That isn't a valid date and time." };
+  if (startsAt && endsAt && Date.parse(endsAt) <= Date.parse(startsAt)) return { error: "The end must be after the start." };
+
+  const id = text(formData, "id");
+  return { value: { id: id ? Number(id) : undefined, message, colour, link, active: formData.get("active") === "on", startsAt, endsAt } };
+}
+
+/** "51.6630, -0.3958" (as copied from a map) as a position; null if it isn't one, or isn't near the UK. */
+export function parseLatLng(value: string): LatLng | null {
+  const match = /^\s*(-?\d+(?:\.\d+)?)\s*[,\s]\s*(-?\d+(?:\.\d+)?)\s*$/.exec(value);
+  if (!match) return null;
+  const lat = Number(match[1]);
+  const lng = Number(match[2]);
+  return lat >= 49 && lat <= 61 && lng >= -9 && lng <= 3 ? { lat, lng } : null;
+}
+
+/** A pin's new position: the place, and "latitude, longitude". */
+export function checkMarker(formData: FormData): Checked<{ placeId: PlaceId; position: LatLng }> {
+  const placeId = text(formData, "placeId");
+  if (!isPlaceId(placeId)) return { error: "That isn't a known place." };
+  const position = parseLatLng(text(formData, "position"));
+  if (!position) return { error: "Enter the position as latitude, longitude (e.g. 51.6630, -0.3958), in the UK." };
+  return { value: { placeId, position } };
 }

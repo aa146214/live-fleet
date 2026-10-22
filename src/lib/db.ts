@@ -65,6 +65,26 @@ export async function createSchema(sql: Sql): Promise<void> {
       road jsonb,
       updated_at timestamptz not null default now()
     )`;
+  // News banners shown above the map (see banners.ts).
+  await sql`
+    create table if not exists banners (
+      id serial primary key,
+      message text not null,
+      colour text not null default 'navy',
+      link text not null default '',
+      active boolean not null default true,
+      starts_at timestamptz,
+      ends_at timestamptz,
+      updated_at timestamptz not null default now()
+    )`;
+  // Where a place's pin is drawn when that isn't where FleetSmart has the place (see routes.ts, withMarkers).
+  await sql`
+    create table if not exists place_markers (
+      place_id text primary key,
+      lat double precision not null,
+      lng double precision not null,
+      updated_at timestamptz not null default now()
+    )`;
   await seedRoutes(sql);
 }
 

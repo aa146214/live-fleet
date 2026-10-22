@@ -3,8 +3,17 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireAdmin, signIn, signOut } from "@/lib/admin-auth";
-import { checkAssignment, checkRoute } from "@/lib/admin-validation";
-import { adminDeleteAssignment, adminDeleteRoute, adminSaveAssignment, adminSaveRoute } from "@/lib/config-store";
+import { checkAssignment, checkBanner, checkMarker, checkRoute } from "@/lib/admin-validation";
+import {
+  adminDeleteAssignment,
+  adminDeleteBanner,
+  adminDeleteMarker,
+  adminDeleteRoute,
+  adminSaveAssignment,
+  adminSaveBanner,
+  adminSaveMarker,
+  adminSaveRoute,
+} from "@/lib/config-store";
 import { hasDatabase } from "@/lib/db";
 
 /** Where to go back to after a change: a page of the admin, so a form can't send people elsewhere. */
@@ -100,4 +109,59 @@ export async function unassignVehicleAction(formData: FormData) {
     return backTo(back, "error", describe(error));
   }
   return backTo(back, "notice", "Minibus taken off the route.");
+}
+
+const BANNERS = "/admin/banners";
+
+/** Saves a news banner (making it if it's new). */
+export async function saveBannerAction(formData: FormData) {
+  await requireAdmin();
+  const checked = checkBanner(formData);
+  if (checked.error !== undefined) return backTo(BANNERS, "error", checked.error);
+  if (!hasDatabase()) return backTo(BANNERS, "error", NO_DATABASE);
+  try {
+    await adminSaveBanner(checked.value);
+  } catch (error) {
+    return backTo(BANNERS, "error", describe(error));
+  }
+  return backTo(BANNERS, "notice", "Banner saved.");
+}
+
+export async function deleteBannerAction(formData: FormData) {
+  await requireAdmin();
+  if (!hasDatabase()) return backTo(BANNERS, "error", NO_DATABASE);
+  try {
+    await adminDeleteBanner(Number(formData.get("id")));
+  } catch (error) {
+    return backTo(BANNERS, "error", describe(error));
+  }
+  return backTo(BANNERS, "notice", "Banner deleted.");
+}
+
+const MARKERS = "/admin/markers";
+
+/** Moves a place's pin on the map. */
+export async function saveMarkerAction(formData: FormData) {
+  await requireAdmin();
+  const checked = checkMarker(formData);
+  if (checked.error !== undefined) return backTo(MARKERS, "error", checked.error);
+  if (!hasDatabase()) return backTo(MARKERS, "error", NO_DATABASE);
+  try {
+    await adminSaveMarker(checked.value.placeId, checked.value.position);
+  } catch (error) {
+    return backTo(MARKERS, "error", describe(error));
+  }
+  return backTo(MARKERS, "notice", "Pin moved. It shows on the map within a minute.");
+}
+
+/** Puts a pin back where its place is. */
+export async function resetMarkerAction(formData: FormData) {
+  await requireAdmin();
+  if (!hasDatabase()) return backTo(MARKERS, "error", NO_DATABASE);
+  try {
+    await adminDeleteMarker(String(formData.get("placeId") ?? ""));
+  } catch (error) {
+    return backTo(MARKERS, "error", describe(error));
+  }
+  return backTo(MARKERS, "notice", "Pin put back where its place is.");
 }

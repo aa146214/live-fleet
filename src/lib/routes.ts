@@ -71,9 +71,9 @@ export const placeKindOf = (name: string): PlaceKind => (/\bwbsl\b|\bstudios?\b/
 export const BUILT_IN_PLACES: Place[] = [
   { id: "studio-north", name: "WBSL North Entrance", kind: "studio", address: "Warner Drive, WD25 7LP", ...NORTH_ENTRANCE_LOCATION },
   { id: "studio-south", name: "WBSL South Entrance", kind: "studio", what3words: "///goes.forget.lions", ...SOUTH_ENTRANCE_LOCATION },
-  { id: "station-1", name: "Watford Junction Train Station", kind: "station", what3words: "///hired.boat.speaks", lat: 51.6635, lng: -0.3963 },
-  { id: "station-2", name: "St Albans City Train Station", kind: "station", what3words: "///soup.moral.easy", lat: 51.7503, lng: -0.3276 },
-  { id: "station-3", name: "Rickmansworth Train Station", kind: "station", what3words: "///trim.lied.tops", lat: 51.6402, lng: -0.4732 },
+  { id: "station-1", name: "Watford Junction Train Station", kind: "station", what3words: "///hired.boat.speaks", lat: 51.6641, lng: -0.3958 },
+  { id: "station-2", name: "St Albans City Train Station", kind: "station", what3words: "///soup.moral.easy", lat: 51.75073, lng: -0.32709 },
+  { id: "station-3", name: "Rickmansworth Train Station", kind: "station", what3words: "///trim.lied.tops", lat: 51.64032, lng: -0.4730 },
 ];
 
 /**
@@ -125,6 +125,17 @@ export function pinPlacesFor(routes: ShuttleRoute[], known: Place[]): PinPlace[]
     }
   }
   return [...pins.values()];
+}
+
+/**
+ * The pins with the admin's marker positions applied. Only where the pin is drawn changes: the stop
+ * itself (where the road to it is worked out, and how far a minibus is from it) stays where it is.
+ */
+export function withMarkers(pins: PinPlace[], markers: ReadonlyMap<string, LatLng>): PinPlace[] {
+  return pins.map((pin) => {
+    const marker = markers.get(pin.id);
+    return marker ? { ...pin, lat: marker.lat, lng: marker.lng } : pin;
+  });
 }
 
 export function getPlace<T extends Place>(places: T[], id: string | null): T | undefined {

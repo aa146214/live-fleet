@@ -10,6 +10,8 @@
   --color-red: #c62d2d;
   --color-teal: #00778a;
   --color-pink: #b8337a;
+  /* Banner colour: dark text on it. */
+  --color-amber: #ffc83d;
   --color-white: #ffffff;
   --color-ink: #101426;
   --color-muted: #535c72;

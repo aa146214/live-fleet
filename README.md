@@ -77,7 +77,8 @@ drives each minibus along the road it took (`src/lib/road-paths.ts`, `src/lib/mo
 
 ## Admin
 
-`/admin` is where routes are made and minibuses are put on them.
+`/admin` is where routes are made and minibuses are put on them. The menu at the top has the
+sections: **Routes**, **Map markers** and **News banners**.
 
 - **Routes.** **Create route** (or **Edit** on a route) opens one screen for the route's name, a short
   name (used on the buttons at the top of the map), a colour from the palette, and its stops: add
@@ -100,12 +101,25 @@ drives each minibus along the road it took (`src/lib/road-paths.ts`, `src/lib/mo
   next stop along the road), and the road the shuttle follows between reports. Each route's stops are
   pinned (in the route's colour, or navy where several routes call); the studio keeps the Warner Bros.
   shield. Changes show within about 40 seconds.
+- **Map markers.** **Map markers** in the menu lists the places the routes call at; a pin's position can
+  be changed (latitude, longitude, as copied from a map) without touching FleetSmart, and **Put back**
+  returns it to its place. Only where the pin is drawn changes; the stop, and the road to it, stay
+  where the place is. Stored in `place_markers`; shows within about a minute.
+- **News banners.** **News banners** in the admin menu (`/admin/banners`) makes the lines shown on a coloured strip
+  above the map, such as "Watford Junction train station is currently closed". A banner has a message
+  (up to 140 characters), a colour from the presets, an optional link, an **On** switch and an
+  optional start and end (UK time, empty = no limit). A banner shows while it is on and between its
+  dates; the map checks the dates as time passes, so it appears and goes without a reload. One banner
+  is a plain line; several take turns (a fade every 6 seconds, dots to pick one, a swipe on a touch
+  screen; paused while the pointer is over it). Banners can't be dismissed, and the strip isn't shown
+  when none is showing. They are in the `banners` table and ride along with the vehicles, so a change
+  shows within about 40 seconds. The demo has none.
 - Sign in with `ADMIN_USERNAME` and `ADMIN_PASSWORD` from the environment. `SESSION_SECRET`
   (32+ random characters) signs the session cookie, which lasts 8 hours. Use a long password:
   failed attempts are counted per server instance (5 failures lock that client out for 15 minutes),
   which slows guessing but isn't a hard limit on serverless hosting.
-- The data lives in Neon Postgres (`DATABASE_URL`): the routes (`routes`) and which vehicle is on
-  which (`vehicle_assignments`). The tables are created, and an older database upgraded, when a query
+- The data lives in Neon Postgres (`DATABASE_URL`): the routes (`routes`), which vehicle is on
+  which (`vehicle_assignments`) the pin positions (`place_markers`) and the news banners (`banners`). The tables are created, and an older database upgraded, when a query
   finds one missing; an older database's three routes keep their ids and vehicles, and take the
   stops its vehicles had. Without `DATABASE_URL` the app uses the three routes in `src/lib/routes.ts`
   and the vehicles in `src/config/vehicle-assignments.ts`, and the admin says nothing can be saved.

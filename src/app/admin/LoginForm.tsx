@@ -7,7 +7,7 @@ import styles from "./admin.module.css";
 export function LoginForm() {
   const [state, action, pending] = useActionState(signInAction, undefined);
   return (
-    <form action={action} className={styles.card}>
+    <form action={action} className={`${styles.card} ${styles.signIn}`}>
       <h2 className={styles.cardTitle}>Sign in</h2>
       <label className={styles.field}>
         <span>Username</span>

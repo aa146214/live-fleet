@@ -1,4 +1,5 @@
-import { getAssignments, getRoutes, normaliseVrn, type Assignment } from "./config-store";
+import type { MapBanner } from "./banners";
+import { getAssignments, getBanners, getMarkers, getRoutes, normaliseVrn, type Assignment } from "./config-store";
 import { distanceMetres, estimateNextDestination, type StopPoint } from "./destination";
 import { attachRoads, nearestRoad, streetNear, type PreviousReport } from "./road-paths";
 import { locateOnLoop, loopIfReady, loopStopsFor, nextStop, PREDICT_BETWEEN_REPORTS, roadAhead } from "./route-loops";
@@ -10,6 +11,7 @@ import {
   placeKindOf,
   stopSequence,
   tidyPlaceName,
+  withMarkers,
   type PinPlace,
   type Place,
   type PlaceId,
@@ -267,12 +269,23 @@ const previousReportOf: PreviousReport = async (vehicle, report) => {
 };
 
 /** Reads the routes, the shuttles and their live positions side by side, rather than one after another. */
-async function fetchLiveVehicles(): Promise<{ routes: ShuttleRoute[]; places: PinPlace[]; vehicles: Vehicle[] }> {
+async function fetchLiveVehicles(): Promise<{
+  routes: ShuttleRoute[];
+  places: PinPlace[];
+  vehicles: Vehicle[];
+  banners: MapBanner[];
+}> {
   const assignmentsRead = getAssignments();
   const views = fetchShuttleViews(assignmentsRead);
   // Started after the live views so it takes FleetSmart's next turn, not the first.
   const fleetPlaces = listFleetPlaces();
-  const [routes, assignments, documents] = await Promise.all([getRoutes(), assignmentsRead, views]);
+  const [routes, assignments, documents, banners, markers] = await Promise.all([
+    getRoutes(),
+    assignmentsRead,
+    views,
+    getBanners(),
+    getMarkers(),
+  ]);
 
   const vehicles = toVehicles(documents, assignments, routes);
   await attachRoads(vehicles, ROAD_LOOKUP_WAIT_MS, previousReportOf);
@@ -282,7 +295,7 @@ async function fetchLiveVehicles(): Promise<{ routes: ShuttleRoute[]; places: Pi
   }
   guessDestinations(vehicles, places);
   applyRouterDetails(vehicles, places);
-  return { routes, places: pinPlacesFor(routes, places), vehicles };
+  return { routes, places: withMarkers(pinPlacesFor(routes, places), markers), vehicles, banners };
 }
 
 
@@ -476,8 +489,8 @@ export async function getLiveSnapshot(): Promise<FleetSnapshot> {
   if (inFlight) return inFlight;
 
   inFlight = fetchLiveVehicles()
-    .then(({ routes, places, vehicles }) => {
-      const snapshot: FleetSnapshot = { mode: "live", routes, places, vehicles, fetchedAt: new Date().toISOString() };
+    .then(({ routes, places, vehicles, banners }) => {
+      const snapshot: FleetSnapshot = { mode: "live", routes, places, banners, vehicles, fetchedAt: new Date().toISOString() };
       cached = { at: Date.now(), snapshot };
       return snapshot;
     })

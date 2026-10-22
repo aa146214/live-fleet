@@ -9,6 +9,7 @@ import type { RouteId } from "@/lib/types";
 import { useFleet } from "@/lib/use-fleet";
 import { AppHeader } from "./AppHeader";
 import { FadeThrough } from "./FadeThrough";
+import { NewsBanner } from "./NewsBanner";
 import { PlaceDetails } from "./PlaceDetails";
 import { VehicleDetails } from "./VehicleDetails";
 import { VehicleRow } from "./VehicleRow";
@@ -119,6 +120,7 @@ export function LiveMapScreen() {
       <PlacesProvider value={places}>
       <div className={`${styles.screen} ${hasDetails ? styles.hasSelection : ""}`}>
         <AppHeader routeCounts={routeCounts} onSelectRoute={showRoute} />
+        <NewsBanner banners={snapshot?.banners} />
 
         {error && (
           <p className={styles.error} role="alert">

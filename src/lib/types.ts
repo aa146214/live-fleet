@@ -41,6 +41,8 @@ export interface FleetSnapshot {
   routes?: import("./routes").ShuttleRoute[];
   /** The places the routes call at, for the map's pins. */
   places?: import("./routes").PinPlace[];
+  /** The news banners that are on (the map checks their dates as time passes). */
+  banners?: import("./banners").MapBanner[];
   mode: "live" | "demo";
   vehicles: Vehicle[];
   fetchedAt: string;
