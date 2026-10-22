@@ -12,14 +12,8 @@ import {
   type Size,
 } from "@/lib/label-placement";
 import { drawnPosition, firstMotion, isStale, updateMotion, type Fix, type Motion } from "@/lib/motion";
-import {
-  getRoute,
-  NORTH_ENTRANCE_LOCATION,
-  routeColor,
-  SOUTH_ENTRANCE_LOCATION,
-  type Place,
-  type PlaceId,
-} from "@/lib/routes";
+import { stationPinHtml, STATION_PIN } from "@/lib/pin-art";
+import { getRoute, routeColor, type PinPlace, type PlaceId, type ShuttleRoute } from "@/lib/routes";
 import { usePlaces, useRoutes } from "@/lib/routes-context";
 import type { FleetSnapshot, RouteId, Vehicle } from "@/lib/types";
 import styles from "./FleetMap.module.css";
@@ -46,7 +40,7 @@ const LAYOUT_INTERVAL_MS = 1000;
 
 /** Pin artwork: the tip (the real location) is near the bottom centre. */
 const PIN_GEOMETRY = {
-  station: { width: 43, height: 43, tipX: 21.5, tipY: 40.4 },
+  station: { width: STATION_PIN.width, height: STATION_PIN.height, tipX: STATION_PIN.tipX, tipY: STATION_PIN.tipY },
   studio: { width: 52, height: 63.3, tipX: 26, tipY: 62.8 },
 };
 
@@ -107,7 +101,8 @@ const placementStyle = ({ x, y }: Placement) => `--lx:${x}px;--ly:${y}px`;
  * hover/focus, or always when `labelled`.
  */
 function busIcon(
-  { code, routeId, heading }: Pick<Vehicle, "code" | "routeId" | "heading">,
+  { code, heading }: Pick<Vehicle, "code" | "heading">,
+  color: string,
   scale: number,
   selected: boolean,
   labelled: boolean,
@@ -115,7 +110,6 @@ function busIcon(
   animateLabel: boolean,
   placement: Placement,
 ): L.DivIcon {
-  const color = routeColor(routeId);
   const size = Math.ceil(BUS_HEIGHT * scale);
   const classes = [
     styles.vehicleIcon,
@@ -140,14 +134,21 @@ function busIcon(
   });
 }
 
-function pinIcon(place: Place, selected: boolean): L.DivIcon {
-  const geometry = place.routeId === null ? PIN_GEOMETRY.studio : PIN_GEOMETRY.station;
-  const src = place.routeId === null ? "/icons/pin-studio.svg" : `/icons/pin-route${place.routeId}.svg`;
+/** A pin is the route's colour when one route calls there, navy when several do. */
+function pinColor(place: PinPlace, routes: ShuttleRoute[]): string {
+  return place.routeIds.length === 1 ? routeColor(routes, place.routeIds[0]) : "var(--color-navy)";
+}
+
+function pinIcon(place: PinPlace, color: string, selected: boolean): L.DivIcon {
+  const studio = place.kind === "studio";
+  const geometry = studio ? PIN_GEOMETRY.studio : PIN_GEOMETRY.station;
   return L.divIcon({
     className: `${styles.pinIcon} ${selected ? styles.pinSelected : ""}`,
     iconSize: [geometry.width, geometry.height],
     iconAnchor: [geometry.tipX, geometry.tipY],
-    html: `<img src="${src}" width="${geometry.width}" height="${geometry.height}" alt="">`,
+    html: studio
+      ? `<img src="/icons/pin-studio.svg" width="${geometry.width}" height="${geometry.height}" alt="">`
+      : stationPinHtml(color),
   });
 }
 
@@ -196,19 +197,21 @@ function VehicleMarker({
   // (which would snap the bus to that heading); only whether it has an arrow matters.
   const hasHeading = heading !== null;
   const iconHeading = animated ? (hasHeading ? 0 : null) : heading;
+  const routes = useRoutes();
+  const color = routeColor(routes, routeId);
+  const route = getRoute(routes, routeId);
   const icon = useMemo(
     () => {
       const drawnHeading = animated ? (shownHeading(vehicle.id) ?? heading) : heading;
-      return busIcon({ code, routeId, heading: hasHeading ? drawnHeading : null }, scale, selected, labelled, stale, animateLabel, { x, y });
+      return busIcon({ code, heading: hasHeading ? drawnHeading : null }, color, scale, selected, labelled, stale, animateLabel, { x, y });
     },
     // `iconHeading` stands in for `heading`: new report headings must not rebuild an animated icon.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [code, routeId, iconHeading, scale, selected, labelled, stale, animateLabel, x, y],
+    [code, color, iconHeading, scale, selected, labelled, stale, animateLabel, x, y],
   );
   const [startPosition] = useState<L.LatLngTuple>(() => [vehicle.lat, vehicle.lng]);
   const reportedPosition = useMemo<L.LatLngTuple>(() => [vehicle.lat, vehicle.lng], [vehicle.lat, vehicle.lng]);
   const ref = useCallback((marker: L.Marker | null) => onMarker(vehicle.id, marker), [onMarker, vehicle.id]);
-  const route = getRoute(useRoutes(), routeId);
   const label = `Minibus ${code}${route ? `, ${route.name}` : ""}`;
 
   return (
@@ -431,7 +434,7 @@ function VehicleLayer({
       }),
     );
     const pinBoxes: Box[] = places.map((place) => {
-      const g = place.routeId === null ? PIN_GEOMETRY.studio : PIN_GEOMETRY.station;
+      const g = place.kind === "studio" ? PIN_GEOMETRY.studio : PIN_GEOMETRY.station;
       const { x, y } = map.latLngToContainerPoint([place.lat, place.lng]);
       return { x: x - g.tipX + g.width / 2, y: y - g.tipY + g.height / 2, width: g.width, height: g.height };
     });
@@ -522,8 +525,10 @@ function VehicleLayer({
   });
 }
 
-function PlacePin({ place, selected, onSelect }: { place: Place; selected: boolean; onSelect: (id: PlaceId) => void }) {
-  const icon = useMemo(() => pinIcon(place, selected), [place, selected]);
+function PlacePin({ place, selected, onSelect }: { place: PinPlace; selected: boolean; onSelect: (id: PlaceId) => void }) {
+  const routes = useRoutes();
+  const color = pinColor(place, routes);
+  const icon = useMemo(() => pinIcon(place, color, selected), [place, color, selected]);
   return (
     <Marker
       position={[place.lat, place.lng]}
@@ -536,7 +541,7 @@ function PlacePin({ place, selected, onSelect }: { place: Place; selected: boole
   );
 }
 
-function boundsFor(vehicles: Vehicle[], places: Place[]): L.LatLngBounds {
+function boundsFor(vehicles: Vehicle[], places: PinPlace[]): L.LatLngBounds {
   const points: L.LatLngTuple[] = vehicles.length
     ? vehicles.map((v) => [v.lat, v.lng])
     : places.map((p) => [p.lat, p.lng]);
@@ -555,7 +560,7 @@ function MapBehaviour({
   const places = usePlaces();
   const hasFitted = useRef(false);
 
-  // Shows a route's area: its station, the studio and its minibuses as they are now.
+  // Shows a route's area: its stops and its minibuses as they are now.
   const latestVehicles = useRef(vehicles);
   useEffect(() => {
     latestVehicles.current = vehicles;
@@ -565,12 +570,9 @@ function MapBehaviour({
     if (!routeFocus) return;
     const route = getRoute(routes, routeFocus.routeId);
     if (!route) return;
-    const points: L.LatLngTuple[] = [
-      [route.stationLocation.lat, route.stationLocation.lng],
-      [NORTH_ENTRANCE_LOCATION.lat, NORTH_ENTRANCE_LOCATION.lng],
-      [SOUTH_ENTRANCE_LOCATION.lat, SOUTH_ENTRANCE_LOCATION.lng],
-    ];
+    const points: L.LatLngTuple[] = places.filter((p) => route.stops.includes(p.id)).map((p) => [p.lat, p.lng]);
     for (const v of latestVehicles.current) if (v.routeId === route.id) points.push([v.lat, v.lng]);
+    if (points.length === 0) return;
     map.flyToBounds(L.latLngBounds(points), { padding: FIT_PADDING, duration: 1 });
   }, [map, focusRequest]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -1,23 +1,30 @@
 import { VEHICLE_ASSIGNMENTS } from "@/config/vehicle-assignments";
 import { getSql, hasDatabase } from "./db";
-import { DEFAULT_ROUTES, defaultStops, getRoute, isPlaceId, type PlaceId, type ShuttleRoute } from "./routes";
+import { DEFAULT_ROUTES, isPlaceId, isRouteColour, makeRoute, type PlaceId, type RouteColour, type ShuttleRoute } from "./routes";
 import type { RouteId } from "./types";
 
 /**
- * The settings the admin manages: which vehicles are shuttles (and on which route), and
- * each route's name, station and what3words address. They live in the database; without
- * one (or if it can't be reached) the defaults in code are used, so the map keeps working.
- * Server only.
+ * What the admin manages: the routes (a name, a colour and the stops, in order) and which
+ * vehicles are on each. They live in the database; without one (or if it can't be reached)
+ * the routes in routes.ts and the vehicles in vehicle-assignments.ts are used, so the map
+ * keeps working. Server only.
  */
 
 export interface Assignment {
   /** Registration without spaces, upper case. */
   vrn: string;
-  /** The short code shown on the map, e.g. "W1". */
+  /** The short code shown on the map (the number plate unless changed). */
   code: string;
-  /** The route it is on (that of the first station among its stops). */
+  /** The route the vehicle is on, and so the stops it calls at. */
   routeId: RouteId;
-  /** The places it calls at, in order, then back to the first. */
+}
+
+/** What the admin sets for a route. `id` is absent for a new one. */
+export interface RouteInput {
+  id?: RouteId;
+  name: string;
+  shortName: string;
+  colour: RouteColour;
   stops: PlaceId[];
 }
 
@@ -30,40 +37,43 @@ interface Cached<T> {
   at: number;
   value: T;
 }
+let routesCache: Cached<ShuttleRoute[]> | undefined;
 let assignmentsCache: Cached<Assignment[]> | undefined;
 
 const invalidate = () => {
+  routesCache = undefined;
   assignmentsCache = undefined;
 };
 
-const asRouteId = (value: unknown): RouteId => Number(value) as RouteId;
-
-const defaultsFor = (routeId: RouteId) => defaultStops(getRoute(DEFAULT_ROUTES, routeId) ?? DEFAULT_ROUTES[0]);
-
 const staticAssignments = (): Assignment[] =>
-  Object.entries(VEHICLE_ASSIGNMENTS).map(([vrn, { code, routeId }]) => ({
-    vrn: normaliseVrn(vrn),
-    code,
-    routeId,
-    stops: defaultsFor(routeId),
-  }));
+  Object.entries(VEHICLE_ASSIGNMENTS).map(([vrn, { code, routeId }]) => ({ vrn: normaliseVrn(vrn), code, routeId }));
 
-/** Reads a stored assignment; vehicles saved before stops existed get their route's usual stops. */
-function toAssignment(row: Record<string, unknown>): Assignment {
-  const routeId = asRouteId(row.route_id);
-  const stops = String(row.stops ?? "").split(",").filter(isPlaceId);
-  return { vrn: String(row.vrn), code: String(row.code), routeId, stops: stops.length >= 2 ? stops : defaultsFor(routeId) };
+function toRoute(row: Record<string, unknown>): ShuttleRoute {
+  const colour = String(row.colour);
+  return makeRoute({
+    id: Number(row.id),
+    name: String(row.name),
+    shortName: String(row.short_name) || String(row.name),
+    colour: isRouteColour(colour) ? colour : "blue",
+    stops: String(row.stops ?? "").split(",").filter(isPlaceId),
+  });
 }
 
-/**
- * The routes. Their names, stations and positions are defined in code (routes.ts): the admin
- * doesn't edit them, and a stored copy would only go out of date when the wording changes.
- */
+/** The routes the admin has made, in order (those in routes.ts without a database). */
 export async function getRoutes(): Promise<ShuttleRoute[]> {
-  return DEFAULT_ROUTES;
+  if (!hasDatabase()) return DEFAULT_ROUTES;
+  if (routesCache && Date.now() - routesCache.at < CACHE_MS) return routesCache.value;
+  try {
+    const value = await readRoutes();
+    routesCache = { at: Date.now(), value };
+    return value;
+  } catch (error) {
+    console.error("[config] could not read routes:", error instanceof Error ? error.message : error);
+    return routesCache?.value ?? DEFAULT_ROUTES;
+  }
 }
 
-/** The shuttles set up in the admin, which are the vehicles shown on the map. */
+/** The shuttles, keyed by registration. Only these are shown on the map. */
 export async function getAssignments(): Promise<Map<string, Assignment>> {
   const list = await listAssignments();
   return new Map(list.map((assignment) => [assignment.vrn, assignment]));
@@ -84,21 +94,58 @@ async function listAssignments(): Promise<Assignment[]> {
 
 async function readAssignments(): Promise<Assignment[]> {
   const sql = await getSql();
-  const rows = await sql`select vrn, code, route_id, stops from vehicle_assignments order by code`;
-  return rows.map(toAssignment);
+  const rows = await sql`select vrn, code, route_id from vehicle_assignments order by code`;
+  return rows.map((r) => ({ vrn: String(r.vrn), code: String(r.code), routeId: Number(r.route_id) }));
+}
+
+async function readRoutes(): Promise<ShuttleRoute[]> {
+  const sql = await getSql();
+  const rows = await sql`select id, name, short_name, colour, stops from routes order by position, id`;
+  return rows.map(toRoute);
 }
 
 // --- Used by the admin pages (these read the database directly, not the cache) ---
 
 export const adminListAssignments = readAssignments;
-export const adminListRoutes = getRoutes;
+export const adminListRoutes = readRoutes;
+
+/** Saves a route, adding it if it has no id; returns its id. */
+export async function adminSaveRoute(route: RouteInput): Promise<RouteId> {
+  const sql = await getSql();
+  const stops = route.stops.join(",");
+  let id = route.id;
+  if (id === undefined) {
+    const rows = await sql`
+      insert into routes (id, name, short_name, colour, stops, position)
+      values (
+        (select coalesce(max(id), 0) + 1 from routes), ${route.name}, ${route.shortName}, ${route.colour}, ${stops},
+        (select coalesce(max(position), 0) + 1 from routes))
+      returning id`;
+    id = Number(rows[0].id);
+  } else {
+    await sql`
+      update routes set name = ${route.name}, short_name = ${route.shortName}, colour = ${route.colour},
+        stops = ${stops}, updated_at = now()
+      where id = ${id}`;
+  }
+  invalidate();
+  return id;
+}
+
+/** Deletes a route and takes its minibuses off the map (they go back to the unassigned list). */
+export async function adminDeleteRoute(id: RouteId): Promise<void> {
+  const sql = await getSql();
+  await sql`delete from vehicle_assignments where route_id = ${id}`;
+  await sql`delete from routes where id = ${id}`;
+  invalidate();
+}
+
 export async function adminSaveAssignment(assignment: Assignment): Promise<void> {
   const sql = await getSql();
   await sql`
-    insert into vehicle_assignments (vrn, code, route_id, stops)
-    values (${assignment.vrn}, ${assignment.code}, ${assignment.routeId}, ${assignment.stops.join(",")})
-    on conflict (vrn) do update set
-      code = excluded.code, route_id = excluded.route_id, stops = excluded.stops, updated_at = now()`;
+    insert into vehicle_assignments (vrn, code, route_id)
+    values (${assignment.vrn}, ${assignment.code}, ${assignment.routeId})
+    on conflict (vrn) do update set code = excluded.code, route_id = excluded.route_id, updated_at = now()`;
   invalidate();
 }
 

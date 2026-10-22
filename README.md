@@ -77,43 +77,40 @@ drives each minibus along the road it took (`src/lib/road-paths.ts`, `src/lib/mo
 
 ## Admin
 
-`/admin` lists the shuttles and the other vehicles in your FleetSmart account. **Add route** (or
-**Edit route**) opens one screen where you give the vehicle a code (its number plate unless you
-change it) and add its stops one by one
-(the places set up in your FleetSmart account), reorder them and save. The shuttle drives
-the stops in that order and then returns to the first. Changes show on the map within about 30
-seconds.
+`/admin` is where routes are made and minibuses are put on them.
 
-- A shuttle's route (its colour and group on the map) is chosen in a dropdown, which starts from the first
-  station among its stops.
-- Route suggestions: the admin looks at FleetSmart's place events (`poi_events`) for the last 14 days
-  and suggests the route whose station a vehicle keeps visiting (3+ visits to a place within 250 m of
-  the station). It works for any station that exists as a place in the FleetSmart account; today
-  only Watford Junction, the studio (WBSL) and Pinewood Studios do, so St Albans and Rickmansworth
-  need those places adding in FleetSmart first. The lookup takes about a minute the first time
-  (FleetSmart allows one request a second), then is reused for 30 minutes.
-- Stops are the places (Points of Interest) in the FleetSmart account, so to offer another stop, add it
-  as a place in FleetSmart; it shows up in the picker within ten minutes. If the account has no
-  places (or FleetSmart can't be reached) the built-in stations and studio entrances are offered, and
-  shuttles saved with those keep working.
-- The stops drive the map: the route information on the vehicle card, the next destination (the
-  next stop along the road), and the road the shuttle follows between reports.
+- **Routes.** **Create route** (or **Edit** on a route) opens one screen for the route's name, a short
+  name (used on the buttons at the top of the map), a colour from the palette, and its stops: add
+  places one by one, reorder them and save. The minibuses drive the stops in that order and return to
+  the first. A route can be deleted; its minibuses are then no longer on the map.
+- **Minibuses.** On a route's screen, **Add minibuses** lists the vehicles in your FleetSmart account
+  (nearest the studio first, with a search box); **Add** puts one on the route, **Move here** takes
+  it off its other route. Each minibus has a code shown on the map, its number plate unless you change
+  it. The home page also lists the minibuses that are on no route, with a route to pick for each.
+  Only minibuses on a route are shown on the map.
+- **Suggestions.** FleetSmart's place events (`poi_events`) for the last 14 days show which places a
+  vehicle keeps visiting; a minibus that visited one of a route's stops (other than the studio) 3 or
+  more times is suggested that route. The lookup takes about a minute the first time (FleetSmart
+  allows one request a second), then is reused for 30 minutes.
+- **Stops** are the places (Points of Interest) in the FleetSmart account, so to offer another stop,
+  add it as a place in FleetSmart; it shows up in the picker within ten minutes. If the account has no
+  places (or FleetSmart can't be reached) the built-in stations and studio entrances are offered.
+  Places named Pinewood are never offered (`HIDDEN_PLACE_NAMES` in `src/lib/fleetsmart.ts`).
+- **On the map** the stops drive the route information on the vehicle card, the next destination (the
+  next stop along the road), and the road the shuttle follows between reports. Each route's stops are
+  pinned (in the route's colour, or navy where several routes call); the studio keeps the Warner Bros.
+  shield. Changes show within about 40 seconds.
 - Sign in with `ADMIN_USERNAME` and `ADMIN_PASSWORD` from the environment. `SESSION_SECRET`
   (32+ random characters) signs the session cookie, which lasts 8 hours. Use a long password:
   failed attempts are counted per server instance (5 failures lock that client out for 15 minutes),
   which slows guessing but isn't a hard limit on serverless hosting.
-- The data lives in Neon Postgres (`DATABASE_URL`). The tables are created (and an older database
-  upgraded) when a query finds one missing, so normal page loads don't run the setup queries. Without `DATABASE_URL` the app falls back to
-  `src/config/vehicle-assignments.ts` (each vehicle gets its route's usual stops) and the admin page
-  says nothing can be saved.
-- The map shows only the vehicles set up here as shuttles (each with a route). Until one is set up,
-  the map is empty.
-- The three routes' names, stations and positions are defined in `src/lib/routes.ts`; the admin
-  doesn't edit them, so changing the wording is a code change (the `routes` table is kept only because
-  shuttles refer to it).
+- The data lives in Neon Postgres (`DATABASE_URL`): the routes (`routes`) and which vehicle is on
+  which (`vehicle_assignments`). The tables are created, and an older database upgraded, when a query
+  finds one missing; an older database's three routes keep their ids and vehicles, and take the
+  stops its vehicles had. Without `DATABASE_URL` the app uses the three routes in `src/lib/routes.ts`
+  and the vehicles in `src/config/vehicle-assignments.ts`, and the admin says nothing can be saved.
+  The demo always uses the routes in `src/lib/routes.ts`.
 - The vehicle lists in the admin have a search box (registration or place) once they are long enough.
-- Places named Pinewood in FleetSmart are never offered as stops (`HIDDEN_PLACE_NAMES` in
-  `src/lib/fleetsmart.ts`).
 
 ## Configure the shuttles
 

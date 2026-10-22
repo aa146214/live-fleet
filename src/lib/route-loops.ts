@@ -7,7 +7,7 @@ import {
   type Street,
 } from "./polyline-simulation";
 import { fetchBusRoute } from "./road-paths";
-import { destinationOf, getPlace, type LatLng, type Place, type ShuttleRoute } from "./routes";
+import { getPlace, type LatLng, type Place } from "./routes";
 
 /**
  * A shuttle's loop: the road through its stops in order, then back to the first. Each
@@ -35,12 +35,12 @@ export interface LoopStop {
 }
 
 /** The stops for a list of place ids, or undefined if there are fewer than two or one is unknown. */
-export function loopStopsFor(ids: readonly string[], places: Place[], routes: ShuttleRoute[]): LoopStop[] | undefined {
+export function loopStopsFor(ids: readonly string[], places: Place[]): LoopStop[] | undefined {
   const stops: LoopStop[] = [];
   for (const id of ids) {
     const place = getPlace(places, id);
     if (!place) return undefined;
-    stops.push({ id, name: destinationOf(place, routes), location: { lat: place.lat, lng: place.lng } });
+    stops.push({ id, name: place.name, location: { lat: place.lat, lng: place.lng } });
   }
   return stops.length >= 2 ? stops : undefined;
 }

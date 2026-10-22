@@ -1,7 +1,6 @@
 import { slicePolyline, positionAtDistance, streetAt } from "./polyline-simulation";
 import { loopStopsFor, loopWithin, nextStop, PREDICT_BETWEEN_REPORTS, roadAhead } from "./route-loops";
-import { getRoutes } from "./config-store";
-import { defaultStops, getRoute, placesFor, STUDIO_DESTINATION } from "./routes";
+import { BUILT_IN_PLACES, DEFAULT_ROUTES, getRoute, pinPlacesFor, STUDIO_DESTINATION } from "./routes";
 import type { FleetSnapshot, Vehicle } from "./types";
 
 // Illustrative vehicles from the Figma design, used when no FleetSmart credentials are set.
@@ -102,14 +101,15 @@ export async function demoSnapshot(now = new Date()): Promise<FleetSnapshot> {
   const updatedAt = new Date(reportAt).toISOString();
   const previousAt = new Date(reportAt - REPORT_INTERVAL_MS).toISOString();
 
-  const routes = await getRoutes();
-  const places = placesFor(routes);
+  // The demo always uses the routes in routes.ts, whatever the admin has set up.
+  const routes = DEFAULT_ROUTES;
+  const places = BUILT_IN_PLACES;
   const vehicles = await Promise.all(
     DEMO_VEHICLES.map(async (vehicle): Promise<Vehicle> => {
       const route = getRoute(routes, vehicle.routeId);
       if (!route) return { ...vehicle, updatedAt };
-      const stopIds = defaultStops(route);
-      const stops = loopStopsFor(stopIds, places, routes);
+      const stopIds = route.stops;
+      const stops = loopStopsFor(stopIds, places);
       if (!stops) return { ...vehicle, updatedAt };
       const loop = await loopWithin(stops, LOOP_WAIT_MS);
       const { points, cycle, streets } = loop;
@@ -150,6 +150,7 @@ export async function demoSnapshot(now = new Date()): Promise<FleetSnapshot> {
     fetchedAt: now.toISOString(),
     serverTime: now.toISOString(),
     routes,
+    places: pinPlacesFor(routes, places),
     vehicles,
   };
 }

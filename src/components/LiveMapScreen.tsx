@@ -3,8 +3,8 @@
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { countByRoute, DEFAULT_ROUTES, getPlace, placesFor, type PlaceId } from "@/lib/routes";
-import { RoutesProvider } from "@/lib/routes-context";
+import { BUILT_IN_PLACES, countByRoute, DEFAULT_ROUTES, getPlace, pinPlacesFor, type PlaceId } from "@/lib/routes";
+import { PlacesProvider, RoutesProvider } from "@/lib/routes-context";
 import type { RouteId } from "@/lib/types";
 import { useFleet } from "@/lib/use-fleet";
 import { AppHeader } from "./AppHeader";
@@ -30,7 +30,8 @@ export function LiveMapScreen() {
   const searchParams = useSearchParams();
   const selectedParam = searchParams.get("vehicle");
   const routes = snapshot?.routes ?? DEFAULT_ROUTES;
-  const selectedPlace = getPlace(placesFor(routes), searchParams.get("place")) ?? null;
+  const places = useMemo(() => snapshot?.places ?? pinPlacesFor(DEFAULT_ROUTES, BUILT_IN_PLACES), [snapshot]);
+  const selectedPlace = getPlace(places, searchParams.get("place")) ?? null;
 
   const visibleVehicles = useMemo(() => snapshot?.vehicles ?? [], [snapshot]);
   const selected = visibleVehicles.find((vehicle) => vehicle.code === selectedParam) ?? null;
@@ -115,6 +116,7 @@ export function LiveMapScreen() {
 
   return (
     <RoutesProvider value={routes}>
+      <PlacesProvider value={places}>
       <div className={`${styles.screen} ${hasDetails ? styles.hasSelection : ""}`}>
         <AppHeader routeCounts={routeCounts} onSelectRoute={showRoute} />
 
@@ -196,6 +198,7 @@ export function LiveMapScreen() {
           </aside>
         </main>
       </div>
+      </PlacesProvider>
     </RoutesProvider>
   );
 }

@@ -1,4 +1,5 @@
-export type RouteId = 1 | 2 | 3;
+/** A route's id (the admin makes the routes, so there is no fixed set). */
+export type RouteId = number;
 
 export type VehicleStatus = "moving" | "idling" | "stopped" | "unknown";
 
@@ -38,6 +39,8 @@ export interface Vehicle {
 export interface FleetSnapshot {
   /** The routes as the admin has set them up; the defaults apply when absent. */
   routes?: import("./routes").ShuttleRoute[];
+  /** The places the routes call at, for the map's pins. */
+  places?: import("./routes").PinPlace[];
   mode: "live" | "demo";
   vehicles: Vehicle[];
   fetchedAt: string;

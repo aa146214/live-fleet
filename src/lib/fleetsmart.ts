@@ -1,14 +1,16 @@
 import { getAssignments, getRoutes, normaliseVrn, type Assignment } from "./config-store";
-import { distanceMetres, estimateNextDestination } from "./destination";
+import { distanceMetres, estimateNextDestination, type StopPoint } from "./destination";
 import { attachRoads, nearestRoad, streetNear, type PreviousReport } from "./road-paths";
 import { locateOnLoop, loopIfReady, loopStopsFor, nextStop, PREDICT_BETWEEN_REPORTS, roadAhead } from "./route-loops";
 import {
+  BUILT_IN_PLACES,
   STUDIO_LOCATION,
-  defaultStops,
   getRoute,
-  placesFor,
+  pinPlacesFor,
+  placeKindOf,
   stopSequence,
   tidyPlaceName,
+  type PinPlace,
   type Place,
   type PlaceId,
   type ShuttleRoute,
@@ -146,7 +148,9 @@ function toVehicles(
     // Only the vehicles set up as shuttles (in the admin) are shown.
     if (!assignment) continue;
     const code = assignment?.code ?? normaliseVrn(registration);
-    const routeId = assignment?.routeId ?? null;
+    // A shuttle whose route has gone is shown without one.
+    const route = getRoute(routes, assignment.routeId);
+    const routeId = route?.id ?? null;
     const status = toStatus(asString(liveView.attributes.status));
     // Moving: the heading is the direction of travel. Parked: FleetSmart keeps the last
     // heading for some vehicles but reports 0 for most, so treat a parked 0 as unknown.
@@ -170,8 +174,9 @@ function toVehicles(
       // When the tracker took this position (the live view's updated_at is when it reached FleetSmart).
       updatedAt:
         asString(location?.attributes.date_time) || asString(liveView.attributes.updated_at) || null,
-      stops: assignment?.stops,
-      nextDestination: estimateNextDestination({ lat, lng }, getRoute(routes, routeId), heading, status),
+      stops: route?.stops,
+      // A guess for now; guessDestinations (once the places are known) and the road then improve it.
+      nextDestination: "Not on a shuttle route",
     });
   }
 
@@ -262,7 +267,7 @@ const previousReportOf: PreviousReport = async (vehicle, report) => {
 };
 
 /** Reads the routes, the shuttles and their live positions side by side, rather than one after another. */
-async function fetchLiveVehicles(): Promise<{ routes: ShuttleRoute[]; vehicles: Vehicle[] }> {
+async function fetchLiveVehicles(): Promise<{ routes: ShuttleRoute[]; places: PinPlace[]; vehicles: Vehicle[] }> {
   const assignmentsRead = getAssignments();
   const views = fetchShuttleViews(assignmentsRead);
   // Started after the live views so it takes FleetSmart's next turn, not the first.
@@ -271,12 +276,13 @@ async function fetchLiveVehicles(): Promise<{ routes: ShuttleRoute[]; vehicles: 
 
   const vehicles = toVehicles(documents, assignments, routes);
   await attachRoads(vehicles, ROAD_LOOKUP_WAIT_MS, previousReportOf);
-  const places = withFleetPlaces(routes, await fleetPlaces);
+  const places = withFleetPlaces(await fleetPlaces);
   for (const vehicle of vehicles) {
-    if (vehicle.stops) vehicle.routeText = stopSequence(places, routes, vehicle.stops);
+    if (vehicle.stops) vehicle.routeText = stopSequence(places, vehicle.stops);
   }
-  applyRouterDetails(vehicles, routes, places);
-  return { routes, vehicles };
+  guessDestinations(vehicles, places);
+  applyRouterDetails(vehicles, places);
+  return { routes, places: pinPlacesFor(routes, places), vehicles };
 }
 
 
@@ -336,15 +342,26 @@ async function loadFleetPlaces(): Promise<FleetPlace[]> {
 }
 
 /** Every place a stop can be: the built-in ones, and those set up in the FleetSmart account. */
-export async function knownPlaces(routes: ShuttleRoute[]): Promise<Place[]> {
-  return withFleetPlaces(routes, await listFleetPlaces());
+export async function knownPlaces(): Promise<Place[]> {
+  return withFleetPlaces(await listFleetPlaces());
 }
 
-function withFleetPlaces(routes: ShuttleRoute[], fleetPlaces: FleetPlace[]): Place[] {
+function withFleetPlaces(fleetPlaces: FleetPlace[]): Place[] {
   return [
-    ...placesFor(routes),
-    ...fleetPlaces.map(({ id, name, lat, lng }): Place => ({ id, name, lat, lng, routeId: null })),
+    ...BUILT_IN_PLACES,
+    ...fleetPlaces.map(({ id, name, lat, lng }): Place => ({ id, name, lat, lng, kind: placeKindOf(name) })),
   ];
+}
+
+/** Each minibus's likely next stop, from the way it is heading, until the road through its stops is known. */
+function guessDestinations(vehicles: Vehicle[], places: Place[]): void {
+  for (const vehicle of vehicles) {
+    const points = (vehicle.stops ?? []).flatMap((id): StopPoint[] => {
+      const place = places.find((candidate) => candidate.id === id);
+      return place ? [{ name: place.name, location: { lat: place.lat, lng: place.lng } }] : [];
+    });
+    vehicle.nextDestination = estimateNextDestination(vehicle, points, vehicle.heading, vehicle.status);
+  }
 }
 
 /** A vehicle in the FleetSmart account, shuttle or not (the admin picks the shuttles from these). */
@@ -407,11 +424,9 @@ const MPH_TO_MPS = 0.44704;
  * in, the heading-based guess and "Address unavailable" stand; the next snapshot has
  * the better answer.
  */
-function applyRouterDetails(vehicles: Vehicle[], routes: ShuttleRoute[], places: Place[]): void {
+function applyRouterDetails(vehicles: Vehicle[], places: Place[]): void {
   for (const vehicle of vehicles) {
-    const route = getRoute(routes, vehicle.routeId);
-    const stopIds = vehicle.stops ?? (route ? defaultStops(route) : undefined);
-    const stops = stopIds && loopStopsFor(stopIds, places, routes);
+    const stops = vehicle.stops && loopStopsFor(vehicle.stops, places);
     const loop = stops ? loopIfReady(stops) : undefined;
     const here = loop ? locateOnLoop(loop, vehicle, vehicle.heading) : null;
     const moving = vehicle.status === "moving";
@@ -461,8 +476,8 @@ export async function getLiveSnapshot(): Promise<FleetSnapshot> {
   if (inFlight) return inFlight;
 
   inFlight = fetchLiveVehicles()
-    .then(({ routes, vehicles }) => {
-      const snapshot: FleetSnapshot = { mode: "live", routes, vehicles, fetchedAt: new Date().toISOString() };
+    .then(({ routes, places, vehicles }) => {
+      const snapshot: FleetSnapshot = { mode: "live", routes, places, vehicles, fetchedAt: new Date().toISOString() };
       cached = { at: Date.now(), snapshot };
       return snapshot;
     })

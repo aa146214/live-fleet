@@ -16,27 +16,45 @@ export function setSqlForTesting(sql: Sql | undefined): void {
   schema = undefined;
 }
 
-async function createSchema(sql: Sql): Promise<void> {
+/** Creates the tables, or brings older ones up to date (safe to repeat). Exported so tests can run it. */
+export async function createSchema(sql: Sql): Promise<void> {
+  // The routes the admin makes. (Databases from before routes could be made had three fixed ones with
+  // other columns; the statements after the table bring those up to this shape, once.)
   await sql`
     create table if not exists routes (
-      id smallint primary key check (id between 1 and 3),
+      id integer primary key,
       name text not null,
-      station text not null,
-      terminus text not null,
-      what3words text not null,
-      station_lat double precision not null,
-      station_lng double precision not null,
+      short_name text not null default '',
+      colour text not null default 'blue',
+      stops text not null default '',
+      position integer not null default 0,
       updated_at timestamptz not null default now()
     )`;
+  await sql`alter table routes drop constraint if exists routes_id_check`;
+  await sql`alter table vehicle_assignments drop constraint if exists vehicle_assignments_route_id_fkey`.catch(() => undefined);
+  await sql`alter table routes alter column id type integer`;
+  await sql`alter table routes add column if not exists short_name text not null default ''`;
+  await sql`alter table routes add column if not exists colour text not null default 'blue'`;
+  await sql`alter table routes add column if not exists stops text not null default ''`;
+  await sql`alter table routes add column if not exists position integer not null default 0`;
+  await sql`alter table routes drop column if exists station`;
+  await sql`alter table routes drop column if exists terminus`;
+  await sql`alter table routes drop column if exists what3words`;
+  await sql`alter table routes drop column if exists station_lat`;
+  await sql`alter table routes drop column if exists station_lng`;
   await sql`
     create table if not exists vehicle_assignments (
       vrn text primary key,
       code text not null unique,
-      route_id smallint not null references routes (id),
+      route_id integer not null,
       updated_at timestamptz not null default now()
     )`;
-  // The places a vehicle calls at, in order (place ids, comma separated). Added after the first release.
+  await sql`alter table vehicle_assignments alter column route_id type integer`;
+  // (vehicle_assignments.stops, from when each vehicle had its own stops, is no longer used.)
   await sql`alter table vehicle_assignments add column if not exists stops text not null default ''`;
+  await sql`alter table vehicle_assignments add constraint vehicle_assignments_route_id_fkey foreign key (route_id) references routes (id)`.catch(
+    () => undefined,
+  );
   // Each shuttle's last two reports and the road between them (see report-store.ts), so a server
   // that has just started, or another one, still knows where a minibus came from.
   await sql`
@@ -47,13 +65,35 @@ async function createSchema(sql: Sql): Promise<void> {
       road jsonb,
       updated_at timestamptz not null default now()
     )`;
-  // The three routes always exist; the admin edits them rather than adding or removing any.
-  for (const route of DEFAULT_ROUTES) {
+  await seedRoutes(sql);
+}
+
+/**
+ * Starts the routes off: the three in routes.ts when there are none, or, for a database from
+ * before routes could be made, those three given their new names, colours and stops (those of
+ * the vehicles on each, as the stops used to be set per vehicle).
+ */
+async function seedRoutes(sql: Sql): Promise<void> {
+  const [{ n }] = await sql`select count(*)::int as n from routes`;
+  if (Number(n) === 0) {
+    for (const [position, route] of DEFAULT_ROUTES.entries()) {
+      await sql`
+        insert into routes (id, name, short_name, colour, stops, position)
+        values (${route.id}, ${route.name}, ${route.shortName}, ${route.colour}, ${route.stops.join(",")}, ${position + 1})
+        on conflict (id) do nothing`;
+    }
+    return;
+  }
+  for (const [position, route] of DEFAULT_ROUTES.entries()) {
+    const own = await sql`
+      select stops, count(*) as vehicles from vehicle_assignments
+      where route_id = ${route.id} and stops <> '' group by stops order by vehicles desc limit 1`;
+    const stops = own.length > 0 ? String(own[0].stops) : route.stops.join(",");
     await sql`
-      insert into routes (id, name, station, terminus, what3words, station_lat, station_lng)
-      values (${route.id}, ${route.name}, ${route.station}, ${route.terminus}, ${route.what3words},
-              ${route.stationLocation.lat}, ${route.stationLocation.lng})
-      on conflict (id) do nothing`;
+      update routes set name = ${route.name}, short_name = ${route.shortName}, colour = ${route.colour},
+        position = ${position + 1}, stops = ${stops}
+      where id = ${route.id} and short_name = ''`;
+    await sql`update routes set stops = ${stops} where id = ${route.id} and stops = ''`;
   }
 }
 

@@ -29,13 +29,14 @@
 
 .routes {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   list-style: none;
 }
 
 .item {
   display: flex;
-  flex: 1 1 0;
+  flex: 1 1 28%;
   min-width: 0;
 }
 

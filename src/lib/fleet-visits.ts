@@ -1,7 +1,7 @@
 import { after } from "next/server";
 import { distanceMetres } from "./destination";
 import { fleetSmartGet, hasFleetSmartCredentials, type Resource } from "./fleetsmart";
-import type { ShuttleRoute } from "./routes";
+import type { Place, ShuttleRoute } from "./routes";
 import type { RouteId } from "./types";
 
 /**
@@ -20,8 +20,8 @@ const PAGE_GAP_MS = 1100;
 const FRESH_MS = 30 * 60_000;
 const RETRY_MS = 60_000;
 
-/** A place counts as a route's station when it is this close to it. */
-const STATION_MATCH_M = 250;
+/** A visited place counts as one of a route's stops when it is this close to it. */
+const STOP_MATCH_M = 250;
 /** Fewer visits than this in the period isn't a pattern. */
 const MIN_VISITS = 3;
 
@@ -132,15 +132,24 @@ export interface RouteSuggestion {
 }
 
 /** The route whose station the vehicle has visited most, if it is a pattern. */
-export function suggestRoute(summary: VisitSummary, routes: ShuttleRoute[], vrn: string): RouteSuggestion | null {
+export function suggestRoute(
+  summary: VisitSummary,
+  routes: ShuttleRoute[],
+  vrn: string,
+  known: Place[],
+): RouteSuggestion | null {
   const byPlace = summary.visits.get(normalise(vrn));
   if (!byPlace) return null;
   let best: RouteSuggestion | null = null;
   for (const route of routes) {
-    for (const place of summary.places) {
-      if (distanceMetres(place, route.stationLocation) > STATION_MATCH_M) continue;
-      const count = byPlace.get(place.name) ?? 0;
-      if (count >= MIN_VISITS && (!best || count > best.visits)) best = { routeId: route.id, place: place.name, visits: count };
+    // Every route calls at the studio, so only the other stops tell the routes apart.
+    const stops = route.stops
+      .map((id) => known.find((place) => place.id === id))
+      .filter((place): place is Place => place !== undefined && place.kind !== "studio");
+    for (const visited of summary.places) {
+      if (!stops.some((stop) => distanceMetres(stop, visited) <= STOP_MATCH_M)) continue;
+      const count = byPlace.get(visited.name) ?? 0;
+      if (count >= MIN_VISITS && (!best || count > best.visits)) best = { routeId: route.id, place: visited.name, visits: count };
     }
   }
   return best;

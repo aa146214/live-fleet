@@ -4,6 +4,12 @@
   --color-blue: #015cfe;
   --color-black: #101426;
   --color-green: #038566;
+  /* More route colours: all dark enough for white text. */
+  --color-purple: #6d3fd1;
+  --color-orange: #c2570c;
+  --color-red: #c62d2d;
+  --color-teal: #00778a;
+  --color-pink: #b8337a;
   --color-white: #ffffff;
   --color-ink: #101426;
   --color-muted: #535c72;

@@ -10,7 +10,8 @@ interface VehicleRowProps {
 }
 
 export function VehicleRow({ vehicle, selected, onSelect }: VehicleRowProps) {
-  const route = getRoute(useRoutes(), vehicle.routeId);
+  const routes = useRoutes();
+  const route = getRoute(routes, vehicle.routeId);
   return (
     <button
       type="button"
@@ -18,7 +19,7 @@ export function VehicleRow({ vehicle, selected, onSelect }: VehicleRowProps) {
       aria-pressed={selected}
       onClick={() => onSelect(vehicle.code)}
     >
-      <span className={styles.badge} style={{ background: routeColor(vehicle.routeId) }}>
+      <span className={styles.badge} style={{ background: routeColor(routes, vehicle.routeId) }}>
         {vehicle.code}
       </span>
       <span className={styles.text}>

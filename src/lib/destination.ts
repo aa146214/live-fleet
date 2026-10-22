@@ -1,4 +1,4 @@
-import { SOUTH_ENTRANCE_LOCATION, STUDIO_DESTINATION, type LatLng, type ShuttleRoute } from "./routes";
+import type { LatLng } from "./routes";
 import type { VehicleStatus } from "./types";
 
 const EARTH_RADIUS_M = 6_371_000;
@@ -26,29 +26,32 @@ function angleBetween(a: number, b: number): number {
   return diff > 180 ? 360 - diff : diff;
 }
 
+/** A stop of a route, for guessing where a minibus is heading. */
+export interface StopPoint {
+  name: string;
+  location: LatLng;
+}
+
 /**
- * FleetSmart has no timetable data, so the next stop is estimated: a shuttle
- * only runs between its station and the studio, so pick whichever end it is
- * heading towards. A stationary shuttle is assumed to leave for the far end.
+ * FleetSmart has no timetable data, so until the road through the stops is known (route-loops.ts
+ * then says exactly) the next stop is estimated: of the route's stops, the one the minibus is
+ * heading towards. A stationary minibus is assumed to leave for the farthest one.
  */
 export function estimateNextDestination(
   position: LatLng,
-  route: ShuttleRoute | undefined,
+  stops: StopPoint[] | undefined,
   heading: number | null,
   status: VehicleStatus,
 ): string {
-  if (!route) return "Not on a shuttle route";
-
-  const ends = [
-    { name: STUDIO_DESTINATION, location: SOUTH_ENTRANCE_LOCATION },
-    { name: route.station, location: route.stationLocation },
-  ];
+  if (!stops || stops.length === 0) return "Not on a shuttle route";
+  const ends = stops.filter((stop, i) => stops.findIndex((other) => other.name === stop.name) === i);
 
   if (status === "moving" && heading !== null) {
     const [best] = [...ends].sort(
       (a, b) =>
         angleBetween(heading, bearingDegrees(position, a.location)) -
-        angleBetween(heading, bearingDegrees(position, b.location)),
+          angleBetween(heading, bearingDegrees(position, b.location)) ||
+        distanceMetres(position, a.location) - distanceMetres(position, b.location),
     );
     return best.name;
   }

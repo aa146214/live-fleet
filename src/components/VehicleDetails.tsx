@@ -15,7 +15,7 @@ interface VehicleDetailsProps {
 export function VehicleDetails({ vehicle, onClose }: VehicleDetailsProps) {
   const routes = useRoutes();
   const places = usePlaces();
-  const color = routeColor(vehicle.routeId);
+  const color = routeColor(routes, vehicle.routeId);
 
   return (
     <DetailsCard
@@ -38,7 +38,7 @@ export function VehicleDetails({ vehicle, onClose }: VehicleDetailsProps) {
         ["Vehicle registration", vehicle.registration],
         ["Next destination", vehicle.nextDestination],
         ["Vehicle location", vehicle.address],
-        ["Route information", vehicle.routeText ?? (vehicle.stops ? stopSequence(places, routes, vehicle.stops) : "Not assigned to a shuttle route")],
+        ["Route information", vehicle.routeText ?? (vehicle.stops ? stopSequence(places, vehicle.stops) : "Not assigned to a shuttle route")],
         ["Last updated", formatUpdated(vehicle.updatedAt)],
       ]}
     />

@@ -262,3 +262,104 @@ a.secondary {
 .search {
   max-width: 420px;
 }
+
+/* Route colours */
+.colours {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  border: 0;
+}
+
+.colours legend {
+  margin-bottom: 6px;
+  padding: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.swatch {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.swatch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.swatch > span {
+  display: block;
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--color-white);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--color-border);
+}
+
+.swatch input:checked + span {
+  box-shadow: 0 0 0 3px var(--color-ink);
+}
+
+.swatch input:focus-visible + span {
+  outline: 2px solid var(--color-blue);
+  outline-offset: 3px;
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+/* Route cards on the admin home page */
+.routeCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.dot {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.headingRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.assignRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.assignRow select {
+  width: auto;
+  max-width: 220px;
+}
+
+.codeInput {
+  width: 120px;
+}
+
+.assignRow .itemText {
+  flex: 1;
+  min-width: 110px;
+  white-space: nowrap;
+}
