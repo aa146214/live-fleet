@@ -24,6 +24,11 @@ while a key is set (e.g. for a design review), run with `FLEET_DEMO=1`.
 - The first vehicles are streamed in with the page (`src/app/page.tsx`), so loading them starts
   when the page is requested rather than once the browser has run its scripts. After that the
   browser polls `/api/vehicles` every 15 seconds while the tab is visible.
+- A loading page doesn't wait for FleetSmart (about two seconds) when the server has vehicles up to a
+  minute old: it gets those straight away and a fresh set is fetched after the response is sent
+  (`getLiveSnapshot`, `allowStale`). The map draws each minibus from its report times, so the older
+  set draws the same drive, and the browser asks for the fresh one 1.5 seconds later. Only a server
+  that has just started has to wait (about five seconds, mostly FleetSmart).
 - A server's first request fetches the whole fleet, at the same time as reading the routes and
   shuttles from the database, and learns the shuttles' FleetSmart vehicle ids. After that it asks
   for just the shuttles (`filter[vehicle_id]`), about three times faster than the whole fleet.

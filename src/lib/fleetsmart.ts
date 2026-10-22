@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import type { MapBanner } from "./banners";
 import { getAssignments, getBanners, getMarkers, getRoutes, normaliseVrn, type Assignment } from "./config-store";
 import { distanceMetres, estimateNextDestination, type StopPoint } from "./destination";
@@ -483,12 +484,15 @@ const ROAD_LOOKUP_WAIT_MS = 5000;
 let cached: { at: number; snapshot: FleetSnapshot } | null = null;
 let inFlight: Promise<FleetSnapshot> | null = null;
 
-/** Live snapshot, shared across requests so the API rate limit is respected. */
-export async function getLiveSnapshot(): Promise<FleetSnapshot> {
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.snapshot;
-  if (inFlight) return inFlight;
+/**
+ * How old a snapshot can be and still be shown at once to a page that is loading (while a fresh one
+ * is fetched): the map places each minibus from its report times, so a minute-old snapshot draws
+ * the same drive, and the next poll brings the latest.
+ */
+const STALE_OK_MS = 60_000;
 
-  inFlight = fetchLiveVehicles()
+function refreshLiveSnapshot(): Promise<FleetSnapshot> {
+  inFlight ??= fetchLiveVehicles()
     .then(({ routes, places, vehicles, banners }) => {
       const snapshot: FleetSnapshot = { mode: "live", routes, places, banners, vehicles, fetchedAt: new Date().toISOString() };
       cached = { at: Date.now(), snapshot };
@@ -503,6 +507,19 @@ export async function getLiveSnapshot(): Promise<FleetSnapshot> {
     .finally(() => {
       inFlight = null;
     });
-
   return inFlight;
+}
+
+/**
+ * Live snapshot, shared across requests so the API rate limit is respected. With `allowStale` (a page
+ * loading, which would otherwise wait the two or so seconds FleetSmart takes) a snapshot up to a
+ * minute old is returned straight away, and a fresh one is fetched after the response is sent.
+ */
+export async function getLiveSnapshot(options?: { allowStale?: boolean }): Promise<FleetSnapshot> {
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.snapshot;
+  if (options?.allowStale && cached && Date.now() - cached.at < STALE_OK_MS) {
+    after(() => refreshLiveSnapshot().catch(() => undefined));
+    return { ...cached.snapshot, ageMs: Date.now() - cached.at };
+  }
+  return refreshLiveSnapshot();
 }

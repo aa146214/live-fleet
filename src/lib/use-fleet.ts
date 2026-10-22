@@ -10,6 +10,8 @@ const CLOCK_SAMPLES = 10;
 
 /** How long the map waits for the vehicles streamed in with the page before asking for them itself. */
 const SEED_WAIT_MS = 8000;
+/** An older snapshot sent to get the page going is followed by a fresh one this soon (ms). */
+const STALE_REFRESH_MS = 1500;
 /** Vehicles streamed in longer ago than this (an earlier visit to the page) are not used. */
 const SEED_MAX_AGE_MS = 10_000;
 
@@ -55,9 +57,9 @@ export function useFleet(): FleetState {
       });
     }
 
-    function scheduleRefresh() {
+    function scheduleRefresh(delay = POLL_INTERVAL_MS) {
       if (!cancelled && document.visibilityState === "visible") {
-        timer = setTimeout(refresh, POLL_INTERVAL_MS);
+        timer = setTimeout(refresh, delay);
       }
     }
 
@@ -86,7 +88,7 @@ export function useFleet(): FleetState {
         // it the first drawing would take this browser's clock to be right, and a minibus joined
         // part-way along its drive would be placed wrongly by however far the clock is out.
         receive(seed.snapshot, true, seed.at);
-        scheduleRefresh();
+        scheduleRefresh(seed.snapshot.ageMs ? STALE_REFRESH_MS : POLL_INTERVAL_MS);
       } else {
         refresh();
       }

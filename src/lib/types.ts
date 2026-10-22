@@ -48,6 +48,8 @@ export interface FleetSnapshot {
   fetchedAt: string;
   /** The time by FleetSmart's clock when this response was sent (see fleetSmartNow). */
   serverTime?: string;
+  /** Set when this is an older snapshot sent to get a loading page going: how old it is, in ms. */
+  ageMs?: number;
   /** Set when the latest refresh failed and older data is being served. */
   error?: string;
 }

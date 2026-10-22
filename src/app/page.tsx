@@ -23,6 +23,6 @@ export default function Home() {
  */
 async function FirstSnapshot() {
   await connection();
-  const snapshot = await currentSnapshot().catch(() => null);
+  const snapshot = await currentSnapshot({ allowStale: true }).catch(() => null);
   return <FleetSeed snapshot={snapshot} />;
 }
