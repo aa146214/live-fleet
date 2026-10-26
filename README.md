@@ -18,9 +18,20 @@ while a key is set (e.g. for a design review), run with `FLEET_DEMO=1`.
 ## How it works
 
 - `src/app/api/vehicles/route.ts` calls FleetSmart `GET /live_views?include=vehicle,vehicle_location`
-  on the server, so the API key never reaches the browser. Responses are cached for 10 seconds
-  and concurrent requests are shared. Every FleetSmart request waits its turn in one queue,
-  keeping within its one-request-per-second limit.
+  on the server, so the API key never reaches the browser.
+- Every request to FleetSmart goes through `fleetSmartGet` (`src/lib/fleetsmart-api.ts`), which
+  keeps FleetSmart's one-request-a-second limit however many servers, pages and visitors there are:
+  - A response is saved in the database (`fleetsmart_cache`) and reused for 10 seconds (the places
+    list, which rarely changes, for 5 minutes), by every server.
+  - When it is out of date one server takes a lock and makes the request; the others wait for its
+    answer, so there is never a second request at the same time.
+  - Requests for different things are given turns a second apart (`fleetsmart_gate`), by the
+    database's clock.
+  - A request that FleetSmart refuses (for example 429) or that takes over 10 seconds is an error
+    with FleetSmart's message, shown above the map, and is remembered for 5 seconds (longer if
+    FleetSmart sends `Retry-After`) so it isn't sent again at once. The map keeps showing the last
+    known positions.
+  - Without a database (or if it can't be reached) the same is done in memory, per server.
 - The first vehicles are streamed in with the page (`src/app/page.tsx`), so loading them starts
   when the page is requested rather than once the browser has run its scripts. After that the
   browser polls `/api/vehicles` every 15 seconds while the tab is visible.
@@ -124,7 +135,8 @@ sections: **Routes**, **Map markers** and **News banners**.
   failed attempts are counted per server instance (5 failures lock that client out for 15 minutes),
   which slows guessing but isn't a hard limit on serverless hosting.
 - The data lives in Neon Postgres (`DATABASE_URL`): the routes (`routes`), which vehicle is on
-  which (`vehicle_assignments`) the pin positions (`place_markers`) and the news banners (`banners`). The tables are created, and an older database upgraded, when a query
+  which (`vehicle_assignments`) the pin positions (`place_markers`), the news banners (`banners`) and FleetSmart's saved responses
+  (`fleetsmart_cache`, `fleetsmart_gate`). The tables are created, and an older database upgraded, when a query
   finds one missing; an older database's three routes keep their ids and vehicles, and take the
   stops its vehicles had. Without `DATABASE_URL` the app uses the three routes in `src/lib/routes.ts`
   and the vehicles in `src/config/vehicle-assignments.ts`, and the admin says nothing can be saved.

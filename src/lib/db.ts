@@ -85,6 +85,21 @@ export async function createSchema(sql: Sql): Promise<void> {
       lng double precision not null,
       updated_at timestamptz not null default now()
     )`;
+  // Responses from FleetSmart saved for every server to share, a lock so only one server asks for
+  // each at a time, and the turn-taking that keeps requests a second apart (see fleetsmart-api.ts).
+  await sql`
+    create table if not exists fleetsmart_cache (
+      key text primary key,
+      body jsonb,
+      fetched_at timestamptz,
+      clock_ahead_ms double precision not null default 0,
+      error_message text,
+      error_at timestamptz,
+      retry_after_ms integer not null default 0,
+      lock_until timestamptz
+    )`;
+  await sql`create table if not exists fleetsmart_gate (id integer primary key, next_at timestamptz not null default now())`;
+  await sql`insert into fleetsmart_gate (id) values (1) on conflict (id) do nothing`;
   await seedRoutes(sql);
 }
 

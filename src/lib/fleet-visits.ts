@@ -60,9 +60,9 @@ async function build(): Promise<VisitSummary> {
       "page[number]": String(page),
       sort: "-id",
     });
-    // The live map polls the same API, so a request can be turned away; one more try is enough.
+    // The live map polls the same API, so a request can be turned away; one more try, after a failed one has been forgotten, is enough.
     const doc = await fleetSmartGet("/poi_events", params).catch(async () => {
-      await sleep(2500);
+      await sleep(6000);
       return fleetSmartGet("/poi_events", params);
     });
     const times = new Map<string, string>();

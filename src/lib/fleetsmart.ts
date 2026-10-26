@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import type { MapBanner } from "./banners";
+import { fleetSmartGet, type JsonApiDocument, type Resource, type ResourceIdentifier } from "./fleetsmart-api";
 import { getAssignments, getBanners, getMarkers, getRoutes, normaliseVrn, type Assignment } from "./config-store";
 import { distanceMetres, estimateNextDestination, type StopPoint } from "./destination";
 import { attachRoads, nearestRoad, streetNear, type PreviousReport } from "./road-paths";
@@ -21,47 +22,18 @@ import {
 import { streetAt } from "./polyline-simulation";
 import type { FleetSnapshot, Vehicle, VehicleStatus } from "./types";
 
+export { fleetSmartGet, fleetSmartNow, FleetSmartError, type JsonApiDocument, type Resource } from "./fleetsmart-api";
+
 // API guide: https://apiguide.fleetsmartlive.com/
 /** Shown when FleetSmart gives no address. */
 const NO_ADDRESS = "Address unavailable";
-const BASE_URL = process.env.FLEETSMART_BASE_URL ?? "https://www.fleetsmartlive.com/api";
 const PAGE_SIZE = 100;
 const MAX_PAGES = 5;
-// FleetSmart allows one request per second per client.
-const RATE_LIMIT_GAP_MS = 1100;
 const CACHE_TTL_MS = 10_000;
-
-interface ResourceIdentifier {
-  type: string;
-  id: string;
-}
-
-export interface Resource extends ResourceIdentifier {
-  attributes: Record<string, unknown>;
-  relationships?: Record<string, { data?: ResourceIdentifier | null }>;
-}
-
-export interface JsonApiDocument {
-  data: Resource[];
-  included?: Resource[];
-}
 
 // The API accepts the key on its own; the client ID header is sent only when configured.
 export function hasFleetSmartCredentials(): boolean {
   return Boolean(process.env.FLEETSMART_API_KEY);
-}
-
-const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-
-let fleetSmartSlot = Promise.resolve();
-/**
- * Waits for this server's next turn with FleetSmart, which allows one request a second.
- * Every request goes through here, so lookups running side by side don't get refused.
- */
-function fleetSmartTurn(): Promise<void> {
-  const mine = fleetSmartSlot;
-  fleetSmartSlot = mine.then(() => sleep(RATE_LIMIT_GAP_MS));
-  return mine;
 }
 
 async function fetchPage(page: number): Promise<JsonApiDocument> {
@@ -73,41 +45,6 @@ async function fetchPage(page: number): Promise<JsonApiDocument> {
       "page[number]": String(page),
     }),
   );
-}
-
-/** One request to the FleetSmart API, in turn (it allows one per second per client). */
-export async function fleetSmartGet(path: string, params: URLSearchParams, timeoutMs?: number): Promise<JsonApiDocument> {
-  await fleetSmartTurn();
-  const headers: Record<string, string> = {
-    "X-API-KEY": process.env.FLEETSMART_API_KEY ?? "",
-    "Content-Type": "application/vnd.api+json",
-    Accept: "application/vnd.api+json",
-  };
-  if (process.env.FLEETSMART_CLIENT_ID) headers["X-CLIENT-ID"] = process.env.FLEETSMART_CLIENT_ID;
-
-  const response = await fetch(`${BASE_URL}${path}?${params}`, {
-    headers,
-    cache: "no-store",
-    ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
-  });
-  if (!response.ok) {
-    throw new Error(`FleetSmart responded ${response.status} ${response.statusText}`);
-  }
-  // The Date header is truncated to whole seconds, so assume the middle of that second.
-  const serverDate = Date.parse(response.headers.get("date") ?? "");
-  if (Number.isFinite(serverDate)) clockAheadMs = Date.now() - (serverDate + 500);
-  return response.json();
-}
-
-/** How far this server's clock is ahead of FleetSmart's (to about a second). */
-let clockAheadMs = 0;
-
-/**
- * The current time by FleetSmart's clock. Sent with each response so browsers can
- * line report times up with their own clocks, which may be off by many seconds.
- */
-export function fleetSmartNow(): string {
-  return new Date(Date.now() - clockAheadMs).toISOString();
 }
 
 const asString = (value: unknown) => (typeof value === "string" ? value : "");
@@ -248,7 +185,7 @@ const previousReportOf: PreviousReport = async (vehicle, report) => {
   const doc = await fleetSmartGet(
     "/vehicle_locations",
     new URLSearchParams({ "filter[vehicle_id]": vehicle.id, "page[size]": "2", sort: "-id" }),
-    HISTORY_TIMEOUT_MS,
+    { timeoutMs: HISTORY_TIMEOUT_MS },
   );
   const before = doc.data
     .map((row) => row.attributes)
@@ -314,6 +251,8 @@ export interface FleetPlace {
 let placesCache: { at: number; places: FleetPlace[] } | undefined;
 let placesLoading: Promise<FleetPlace[]> | undefined;
 const PLACES_CACHE_MS = 10 * 60_000;
+/** How long a server keeps the places list saved in the database for the others (it rarely changes). */
+const PLACES_SAVED_MS = 5 * 60_000;
 /** Places in the FleetSmart account that are never offered as stops (Warner Bros. doesn't want them listed). */
 const HIDDEN_PLACE_NAMES = [/pinewood/i];
 
@@ -337,6 +276,7 @@ async function loadFleetPlaces(): Promise<FleetPlace[]> {
       const doc = await fleetSmartGet(
         "/pois",
         new URLSearchParams({ "page[size]": String(PAGE_SIZE), "page[number]": String(page) }),
+        { ttlMs: PLACES_SAVED_MS },
       );
       for (const poi of doc.data) {
         const lat = asNumber(poi.attributes.lat);
